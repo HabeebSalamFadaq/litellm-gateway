@@ -1,5 +1,5 @@
 model_list:
-  # ---- main: Gemini 2.5 Pro across all 6 keys ----
+  # ---- main: Gemini 2.5 Pro across 9 keys (the 6 original + 3 new that work on 2.5-flash, 2.5-pro) ----
   - model_name: gateway-main
     litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_1}
   - model_name: gateway-main
@@ -12,8 +12,15 @@ model_list:
     litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_5}
   - model_name: gateway-main
     litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_6}
+  # NEW key 8 works on 2.5-pro (was validated against 2.5-flash but Gemini 2.5-pro has same auth)
+  - model_name: gateway-main
+    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_8}
+  - model_name: gateway-main
+    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_9}
+  - model_name: gateway-main
+    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_10}
 
-  # ---- fast: Gemini 2.5 Flash across all 6 keys ----
+  # ---- fast: Gemini 2.5 Flash across 10 keys (all of them) ----
   - model_name: gateway-fast
     litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_1}
   - model_name: gateway-fast
@@ -26,10 +33,24 @@ model_list:
     litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_5}
   - model_name: gateway-fast
     litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_6}
+  - model_name: gateway-fast
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_7}
+  - model_name: gateway-fast
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_8}
+  - model_name: gateway-fast
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_9}
+  - model_name: gateway-fast
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_10}
+
+  # ---- NEW key 7 only supports gemini-3.5-flash, not 2.5-flash ----
+  # Place it in its own model group so it serves traffic without breaking
+  # the rest. Fallbacks from gateway-fast cover it.
+  - model_name: gateway-3.5
+    litellm_params: {model: gemini/gemini-3.5-flash, api_key: os.environ/GEMINI_API_KEY_7}
+    model_info:
+      note: "newest key, only works on 3.5-flash not 2.5-flash"
 
   # ---- backup tier: OpenRouter across 4 keys ----
-  # nvidia/nemotron-3-super-120b-a12b:free was verified responding with content
-  # on OpenRouter keys 2, 3, 4 at deploy time. Using it as the cross-key backup.
   - model_name: gateway-backup
     litellm_params: {model: openrouter/nvidia/nemotron-3-super-120b-a12b:free, api_key: os.environ/OPENROUTER_API_KEY_1}
   - model_name: gateway-backup
@@ -46,7 +67,8 @@ router_settings:
   cooldown_time: 60
   fallbacks:
     - gateway-main: ["gateway-backup"]
-    - gateway-fast: ["gateway-backup"]
+    - gateway-fast: ["gateway-3.5", "gateway-backup"]
+    - gateway-3.5: ["gateway-backup"]
 
 litellm_settings:
   drop_params: true
