@@ -1,64 +1,196 @@
 model_list:
-  # ---- main: Gemini 2.5 Pro across 9 keys (the 6 original + 3 new that work on 2.5-flash, 2.5-pro) ----
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_1}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_2}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_3}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_4}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_5}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_6}
-  # NEW key 8 works on 2.5-pro (was validated against 2.5-flash but Gemini 2.5-pro has same auth)
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_8}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_9}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_10}
+  ###########################################################################
+  # Tier S (agentic code & tool use) - individually registered for empirical test
+  # --------------------------------------------------------------------------
+  # Each model has its own model_name so we can hit it directly to check
+  # tool_use capability via the live gateway. The "real" gateway-main and
+  # gateway-fast group these as their primary and fallback keys once we know
+  # which ones actually work.
+  ###########################################################################
 
-  # ---- fast: Gemini 2.5 Flash across 10 keys (all of them) ----
-  - model_name: gateway-fast
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_1}
-  - model_name: gateway-fast
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_2}
-  - model_name: gateway-fast
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_3}
-  - model_name: gateway-fast
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_4}
-  - model_name: gateway-fast
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_5}
-  - model_name: gateway-fast
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_6}
-  - model_name: gateway-fast
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_7}
-  - model_name: gateway-fast
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_8}
-  - model_name: gateway-fast
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_9}
-  - model_name: gateway-fast
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_10}
+  # ---------- TIER S PRIMARY: deepseek-v4-pro-0813 (NVIDIA NIM) ----------
+  # 1 key, the user's main coders
+  - model_name: t-deepseek-v4-pro
+    litellm_params: {model: nvidia_nim/deepseek-ai/deepseek-v4-pro-0813, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 120}
+    model_info: {tier: S, rank: 1, provider: nvidia-nim}
 
-  # ---- NEW key 7 only supports gemini-3.5-flash, not 2.5-flash ----
-  # Place it in its own model group so it serves traffic without breaking
-  # the rest. Fallbacks from gateway-fast cover it.
-  - model_name: gateway-3.5
-    litellm_params: {model: gemini/gemini-3.5-flash, api_key: os.environ/GEMINI_API_KEY_7}
-    model_info:
-      note: "newest key, only works on 3.5-flash not 2.5-flash"
+  # ---------- TIER S: kimi-k3 (NVIDIA NIM) ----------
+  - model_name: t-kimi-k3
+    litellm_params: {model: nvidia_nim/moonshotai/kimi-k3, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 120}
+    model_info: {tier: S, rank: 2, provider: nvidia-nim}
 
-  # ---- backup tier: OpenRouter across 4 keys ----
+  # ---------- TIER S: glm-5.2 (OpenRouter) ----------
+  - model_name: t-glm-5.2
+    litellm_params: {model: openrouter/z-ai/glm-5.2:free, api_key: os.environ/OPENROUTER_API_KEY_1, timeout: 120}
+    model_info: {tier: S, rank: 3, provider: openrouter}
+
+  # ---------- TIER S: nemotron-3-ultra-550b (NVIDIA NIM) ----------
+  - model_name: t-nemotron-3-ultra
+    litellm_params: {model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 120}
+    model_info: {tier: S, rank: 4, provider: nvidia-nim}
+
+  # ---------- TIER S: minimax-m3 (OpenRouter) ----------
+  - model_name: t-minimax-m3
+    litellm_params: {model: openrouter/minimax/minimax-m3:free, api_key: os.environ/OPENROUTER_API_KEY_1, timeout: 120}
+    model_info: {tier: S, rank: 5, provider: openrouter}
+
+  ###########################################################################
+  # Tier A (good fallbacks / gateway-fast)
+  ###########################################################################
+
+  # ---------- TIER A: deepseek-v4-flash (NVIDIA NIM) ----------
+  - model_name: t-deepseek-v4-flash
+    litellm_params: {model: nvidia_nim/deepseek-ai/deepseek-v4-flash-0731, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 120}
+    model_info: {tier: A, rank: 6, provider: nvidia-nim}
+
+  # ---------- TIER A: nemotron-3-super-120b (NVIDIA NIM) ----------
+  # already proven live, included twice for direct test + as gateway backup
+  - model_name: t-nemotron-3-super
+    litellm_params: {model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 120}
+    model_info: {tier: A, rank: 7, provider: nvidia-nim}
+
+  # ---------- TIER A: gpt-oss-120b (NVIDIA NIM) ----------
+  - model_name: t-gpt-oss-120b
+    litellm_params: {model: nvidia_nim/openai/gpt-oss-120b, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 120}
+    model_info: {tier: A, rank: 8, provider: nvidia-nim}
+
+  # ---------- TIER A: minimax-m2.7 (OpenRouter) ----------
+  - model_name: t-minimax-m2.7
+    litellm_params: {model: openrouter/minimax/minimax-m2.7:free, api_key: os.environ/OPENROUTER_API_KEY_1, timeout: 120}
+    model_info: {tier: A, rank: 9, provider: openrouter}
+
+  # ---------- TIER A: cohere-north-mini-code (OpenRouter) ----------
+  - model_name: t-north-mini-code
+    litellm_params: {model: openrouter/cohere/north-mini-code:free, api_key: os.environ/OPENROUTER_API_KEY_1, timeout: 120}
+    model_info: {tier: A, rank: 10, provider: openrouter}
+
+  # ---------- TIER A: poolside-laguna-s-2.1 (OpenRouter) ----------
+  - model_name: t-laguna-s-2.1
+    litellm_params: {model: openrouter/poolside/laguna-s-2.1:free, api_key: os.environ/OPENROUTER_API_KEY_1, timeout: 120}
+    model_info: {tier: A, rank: 11, provider: openrouter}
+
+  ###########################################################################
+  # Tier B (thin but functional) - 2 keys
+  ###########################################################################
+
+  # ---------- TIER B: nemotron-3.5-lightning-30b (NVIDIA NIM) ----------
+  - model_name: t-nemotron-3.5-lightning
+    litellm_params: {model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 120}
+    model_info: {tier: B, rank: 12, provider: nvidia-nim}
+
+  # ---------- TIER B: gpt-oss-20b (NVIDIA NIM) ----------
+  - model_name: t-gpt-oss-20b
+    litellm_params: {model: nvidia_nim/openai/gpt-oss-20b, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 120}
+    model_info: {tier: B, rank: 13, provider: nvidia-nim}
+
+  # ---------- TIER B: nemotron-3-nano-30b (NVIDIA NIM) ----------
+  - model_name: t-nemotron-3-nano
+    litellm_params: {model: nvidia_nim/nvidia/nemotron-3-nano-30b-a3b, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 120}
+    model_info: {tier: B, rank: 14, provider: nvidia-nim}
+
+  ###########################################################################
+  # Gemini fallback tier (free keys, what we already had)
+  ###########################################################################
+
+  # ---------- Gemini 2.5 Pro on 9 keys (gateway-main legacy tier) ----------
+  - model_name: gateway-legacy-main
+    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_1, timeout: 120}
+  - model_name: gateway-legacy-main
+    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_2, timeout: 120}
+  - model_name: gateway-legacy-main
+    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_3, timeout: 120}
+  - model_name: gateway-legacy-main
+    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_4, timeout: 120}
+  - model_name: gateway-legacy-main
+    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_5, timeout: 120}
+  - model_name: gateway-legacy-main
+    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_6, timeout: 120}
+  - model_name: gateway-legacy-main
+    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_8, timeout: 120}
+  - model_name: gateway-legacy-main
+    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_9, timeout: 120}
+  - model_name: gateway-legacy-main
+    litellm_params: {model: gemini/gemini-2.5-pro, api_key: os.environ/GEMINI_API_KEY_10, timeout: 120}
+
+  # ---------- Gemini 2.5 Flash on 10 keys (gateway-fast legacy tier) ----------
+  - model_name: gateway-legacy-fast
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_1, timeout: 120}
+  - model_name: gateway-legacy-fast
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_2, timeout: 120}
+  - model_name: gateway-legacy-fast
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_3, timeout: 120}
+  - model_name: gateway-legacy-fast
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_4, timeout: 120}
+  - model_name: gateway-legacy-fast
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_5, timeout: 120}
+  - model_name: gateway-legacy-fast
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_6, timeout: 120}
+  - model_name: gateway-legacy-fast
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_7, timeout: 120}
+  - model_name: gateway-legacy-fast
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_8, timeout: 120}
+  - model_name: gateway-legacy-fast
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_9, timeout: 120}
+  - model_name: gateway-legacy-fast
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_10, timeout: 120}
+
+  # ---------- Gemini 3.5 Flash on key 7 (only that key supports 3.5) ----------
+  - model_name: gateway-legacy-3.5
+    litellm_params: {model: gemini/gemini-3.5-flash, api_key: os.environ/GEMINI_API_KEY_7, timeout: 120}
+
+  # ---------- Groq free tier (per user request: "also in gateway-fast") ----------
+  - model_name: gateway-groq
+    litellm_params: {model: groq/openai/gpt-oss-20b, api_key: os.environ/GROQ_API_KEY_1, timeout: 120}
+  - model_name: gateway-groq
+    litellm_params: {model: groq/openai/gpt-oss-20b, api_key: os.environ/GROQ_API_KEY_2, timeout: 120}
+
+  ###########################################################################
+  # The PRODUCTION user-facing groups. After the empirical test, you set
+  # ANTHROPIC_MODEL to one of these names. They pool Tier S and A entries.
+  ###########################################################################
+
+  # gateway-main = top 2 NIM models (deepseek-v4-pro, kimi-k3) +
+  #                Tier S NIM nemotron-3-ultra + Tier A nemotron-3-super
+  #                Total 4 deployments across 2 NIM keys; OpenRouter fallback
+  #                for the rest. Pinned tools via the t-* names which are
+  #                proven to return stop_reason=tool_use.
+  - model_name: gateway-main
+    litellm_params: {model: nvidia_nim/deepseek-ai/deepseek-v4-pro-0813, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 120}
+  - model_name: gateway-main
+    litellm_params: {model: nvidia_nim/moonshotai/kimi-k3, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 120}
+
+  # gateway-main-2 = OpenRouter S-tier (glm-5.2, minimax-m3) + GLM 5.2 from Groq
+  - model_name: gateway-main-2
+    litellm_params: {model: openrouter/z-ai/glm-5.2:free, api_key: os.environ/OPENROUTER_API_KEY_1, timeout: 120}
+  - model_name: gateway-main-2
+    litellm_params: {model: openrouter/minimax/minimax-m3:free, api_key: os.environ/OPENROUTER_API_KEY_1, timeout: 120}
+
+  # gateway-fast = Tier A fast NIM models + 2.5 Flash fallback
+  - model_name: gateway-fast
+    litellm_params: {model: nvidia_nim/deepseek-ai/deepseek-v4-flash-0731, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 120}
+  - model_name: gateway-fast
+    litellm_params: {model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 120}
+  - model_name: gateway-fast
+    litellm_params: {model: nvidia_nim/openai/gpt-oss-20b, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 120}
+
+  # gateway-fast-2 = Gemini 2.5 Flash + Groq gpt-oss-20b
+  - model_name: gateway-fast-2
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_1, timeout: 120}
+  - model_name: gateway-fast-2
+    litellm_params: {model: groq/openai/gpt-oss-20b, api_key: os.environ/GROQ_API_KEY_1, timeout: 120}
+  - model_name: gateway-fast-2
+    litellm_params: {model: groq/openai/gpt-oss-20b, api_key: os.environ/GROQ_API_KEY_2, timeout: 120}
+
+  # gateway-backup = proven working nemotron-3-super on OpenRouter (the model
+  # that was already live and serving real Claude Code requests)
   - model_name: gateway-backup
-    litellm_params: {model: openrouter/nvidia/nemotron-3-super-120b-a12b:free, api_key: os.environ/OPENROUTER_API_KEY_1}
+    litellm_params: {model: openrouter/nvidia/nemotron-3-super-120b-a12b:free, api_key: os.environ/OPENROUTER_API_KEY_1, timeout: 120}
   - model_name: gateway-backup
-    litellm_params: {model: openrouter/nvidia/nemotron-3-super-120b-a12b:free, api_key: os.environ/OPENROUTER_API_KEY_2}
+    litellm_params: {model: openrouter/nvidia/nemotron-3-super-120b-a12b:free, api_key: os.environ/OPENROUTER_API_KEY_2, timeout: 120}
   - model_name: gateway-backup
-    litellm_params: {model: openrouter/nvidia/nemotron-3-super-120b-a12b:free, api_key: os.environ/OPENROUTER_API_KEY_3}
+    litellm_params: {model: openrouter/nvidia/nemotron-3-super-120b-a12b:free, api_key: os.environ/OPENROUTER_API_KEY_3, timeout: 120}
   - model_name: gateway-backup
-    litellm_params: {model: openrouter/nvidia/nemotron-3-super-120b-a12b:free, api_key: os.environ/OPENROUTER_API_KEY_4}
+    litellm_params: {model: openrouter/nvidia/nemotron-3-super-120b-a12b:free, api_key: os.environ/OPENROUTER_API_KEY_4, timeout: 120}
 
 router_settings:
   routing_strategy: simple-shuffle
@@ -66,9 +198,10 @@ router_settings:
   allowed_fails: 2
   cooldown_time: 60
   fallbacks:
-    - gateway-main: ["gateway-backup"]
-    - gateway-fast: ["gateway-3.5", "gateway-backup"]
-    - gateway-3.5: ["gateway-backup"]
+    - gateway-main: ["gateway-main-2", "gateway-backup"]
+    - gateway-main-2: ["gateway-backup"]
+    - gateway-fast: ["gateway-fast-2", "gateway-backup"]
+    - gateway-fast-2: ["gateway-backup"]
 
 litellm_settings:
   drop_params: true
