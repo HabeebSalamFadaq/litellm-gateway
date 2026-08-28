@@ -1,0 +1,31 @@
+{
+  "model": "PLACEHOLDER",
+  "max_tokens": 500,
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is the weather in Paris in celsius?"
+    }
+  ],
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Get the current weather for a location",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "City name"
+          },
+          "unit": {
+            "type": "string",
+            "enum": ["celsius", "fahrenheit"]
+          }
+        },
+        "required": ["location"]
+      }
+    }
+  ]
+}
+
