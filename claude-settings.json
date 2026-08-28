@@ -1,8 +1,10 @@
 {
+  "_comment": "Template for ~/.claude/settings.json. Copy to that path and fill in your actual gateway URL and key. The gateway URL is the one Railway gave you when you clicked 'Generate Domain'.",
   "env": {
-    "ANTHROPIC_BASE_URL": "https://litellm-production-2ce7.up.railway.app",
-    "ANTHROPIC_AUTH_TOKEN": "sk-litellm-gateway-BdWGjmNnHfS2qs9eTbgAQJPrcIL6xXOp",
+    "ANTHROPIC_BASE_URL": "https://<your-gateway>.up.railway.app",
+    "ANTHROPIC_AUTH_TOKEN": "sk-<your-LITELLM_MASTER_KEY>",
     "ANTHROPIC_MODEL": "gateway-main-2",
-    "ANTHROPIC_SMALL_FAST_MODEL": "gateway-fast-2"
+    "ANTHROPIC_SMALL_FAST_MODEL": "gateway-fast-2",
+    "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT": "1"
   }
 }
