@@ -1,9 +1,7 @@
 """
-Empirical tool-use test for each candidate model.
+Test tool_use for each PRODUCTION gateway group (not the t-* cooldown groups).
 """
 import json
-import os
-import sys
 import time
 import urllib.request
 import urllib.error
@@ -14,17 +12,12 @@ TEMPLATE_PATH = "test_tools.json"
 TIMEOUT = 90
 
 MODELS = [
-    "t-kimi-k3",
-    "t-glm-5.2",
-    "t-nemotron-3-ultra",
-    "t-minimax-m3",
-    "t-deepseek-v4-flash",
-    "t-nemotron-3-super",
-    "t-gpt-oss-120b",
-    "t-minimax-m2.7",
-    "t-north-mini-code",
-    "t-gpt-oss-20b",
-    "t-nemotron-3-nano",
+    "gateway-main",
+    "gateway-main-2",
+    "gateway-fast",
+    "gateway-fast-2",
+    "gateway-backup",
+    "gateway-legacy",
 ]
 
 
@@ -59,7 +52,7 @@ def main():
         if s != 200:
             obj = json.loads(b) if b.startswith("{") else {"raw": b[:200]}
             err = obj.get("error", {}).get("message", b[:200])
-            print(f"  FAIL  {m:30s}  HTTP={s}  {dt}s  {str(err)[:120]}")
+            print(f"  FAIL  {m:25s}  HTTP={s}  {dt}s  {str(err)[:120]}")
             results.append((m, False, s, str(err)[:80], dt))
             continue
         obj = json.loads(b)
@@ -71,19 +64,15 @@ def main():
         tool_input = json.dumps(tool_block["input"]) if tool_block else None
         passed = (stop == "tool_use") and (tool_block is not None)
         mark = "PASS" if passed else "FAIL"
-        print(f"  {mark}  {m:30s}  HTTP=200  {dt}s  stop={stop}  upstream={upstream}")
+        print(f"  {mark}  {m:25s}  HTTP=200  {dt}s  stop={stop}  upstream={upstream}")
         if tool_input:
             print(f"        tool_input: {tool_input}")
         results.append((m, passed, s, stop, dt))
+        time.sleep(2)  # brief pause between calls
 
     print()
     passed = sum(1 for _, p, _, _, _ in results if p)
-    print(f"=== {passed}/{len(results)} models return stop_reason=tool_use ===")
-    print()
-    print("Ranking by tool_use success:")
-    for m, p, s, stop, dt in results:
-        mark = "[X]" if p else "[ ]"
-        print(f"  {mark}  {m:30s}  {dt}s  stop={stop}")
+    print(f"=== {passed}/{len(results)} gateway groups return stop_reason=tool_use ===")
 
 
 if __name__ == "__main__":

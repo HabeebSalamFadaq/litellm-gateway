@@ -27,12 +27,7 @@ model_list:
   # Tier A (verified working, fast)
   ###########################################################################
 
-  # T-A-1: deepseek-v4-flash (verified 200 earlier)
-  - model_name: t-deepseek-v4-flash
-    litellm_params: {model: nvidia_nim/deepseek-ai/deepseek-v4-flash-0731, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 60}
-    model_info: {tier: A, rank: 6, provider: nvidia-nim}
-
-  # T-A-2: nemotron-3-super (already proven live; verified 200 just now)
+  # T-A-1: nemotron-3-super (already proven live; verified 200 just now)
   - model_name: t-nemotron-3-super
     litellm_params: {model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 60}
     model_info: {tier: A, rank: 7, provider: nvidia-nim}
@@ -80,9 +75,7 @@ model_list:
   - model_name: gateway-main-2
     litellm_params: {model: openrouter/minimax/minimax-m3:free, api_key: os.environ/OPENROUTER_API_KEY_1, timeout: 60}
 
-  # gateway-fast = Tier A fast (deepseek flash + gpt-oss-120b)
-  - model_name: gateway-fast
-    litellm_params: {model: nvidia_nim/deepseek-ai/deepseek-v4-flash-0731, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 60}
+  # gateway-fast = Tier A fast (gpt-oss-120b on NIM is fast; deepseek-flash times out)
   - model_name: gateway-fast
     litellm_params: {model: nvidia_nim/openai/gpt-oss-120b, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 60}
 
