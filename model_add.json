@@ -1,8 +1,0 @@
-{
-  "model_name": "claude-coder",
-  "litellm_params": {
-    "model": "gemini/gemini-2.5-flash",
-    "api_key": "os.environ/GEMINI_API_KEY_1"
-  },
-  "model_info": {"provider": "gemini"}
-}
