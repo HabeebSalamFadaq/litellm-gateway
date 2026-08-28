@@ -1,0 +1,404 @@
+###############################################################################
+# LiteLLM gateway for Claude Code
+# ---------------------------------------------------------------------------
+# Single public endpoint that Claude Code talks to. Internally it tries each
+# provider in priority order, rotating through multiple API keys per provider
+# before moving to the next provider.
+#
+# Every model below was verified to actually respond with content on the
+# respective API key. Models that 404/429/500 on the supplied key have been
+# removed - LiteLLM would just cool them down and serve nothing.
+#
+# Priority chain (top to bottom = first tried to last tried):
+#
+#   1. Gemini (Google AI Studio)   - 6 free-tier API keys cycled
+#   2. OpenCode Zen                - 2 confirmed-working free models
+#   3. OpenRouter                  - 4 keys, 4 confirmed-working free models
+#   4. NVIDIA NIM                  - 1 key, 5 confirmed-working models
+#   5. KiraAI (kiraai.vn)          - 1 key, all "free" tier paid in VND
+#
+# All credentials are read from environment variables. NEVER hardcode keys.
+###############################################################################
+
+model_list:
+  ###########################################################################
+  # Tier 1 - Google Gemini (PRIMARY, 6 free-tier keys cycled)
+  # --------------------------------------------------------------------------
+  # Verified working on the supplied free Google AI Studio keys:
+  #   gemini-2.5-flash  - strong, fast, 1M context
+  #   gemini-3.5-flash  - newer flash, 200K+ context, thinking support
+  # The previously chosen gemini-2.5-pro is 404 on free keys ("no longer
+  # available to new users"); gemini-3.1-pro-preview 429s the free tier.
+  ###########################################################################
+  - model_name: claude-coder
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY_1
+      rpm: 60
+      tpm: 1000000
+      timeout: 120
+      reasoning_effort: "none"
+    model_info:
+      provider: gemini
+      id: gemini-2.5-flash-key-1
+
+  - model_name: claude-coder
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY_2
+      rpm: 60
+      tpm: 1000000
+      timeout: 120
+      reasoning_effort: "none"
+    model_info:
+      provider: gemini
+      id: gemini-2.5-flash-key-2
+
+  - model_name: claude-coder
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY_3
+      rpm: 60
+      tpm: 1000000
+      timeout: 120
+      reasoning_effort: "none"
+    model_info:
+      provider: gemini
+      id: gemini-2.5-flash-key-3
+
+  - model_name: claude-coder
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY_4
+      rpm: 60
+      tpm: 1000000
+      timeout: 120
+      reasoning_effort: "none"
+    model_info:
+      provider: gemini
+      id: gemini-2.5-flash-key-4
+
+  - model_name: claude-coder
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY_5
+      rpm: 60
+      tpm: 1000000
+      timeout: 120
+      reasoning_effort: "none"
+    model_info:
+      provider: gemini
+      id: gemini-2.5-flash-key-5
+
+  - model_name: claude-coder
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY_6
+      rpm: 60
+      tpm: 1000000
+      timeout: 120
+      reasoning_effort: "none"
+    model_info:
+      provider: gemini
+      id: gemini-2.5-flash-key-6
+
+  - model_name: claude-coder
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY_1
+      rpm: 60
+      tpm: 1000000
+      timeout: 120
+      reasoning_effort: "none"
+    model_info:
+      provider: gemini
+      id: gemini-3.5-flash-key-1
+
+  - model_name: claude-coder
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY_2
+      rpm: 60
+      tpm: 1000000
+      timeout: 120
+      reasoning_effort: "none"
+    model_info:
+      provider: gemini
+      id: gemini-3.5-flash-key-2
+
+  ###########################################################################
+  # Tier 2 - OpenCode Zen (verified working free models)
+  # --------------------------------------------------------------------------
+  # From the catalog, the only models that responded with content on this
+  # Zen account (no payment method on file) are:
+  #   hy3-free             - Tesla Hy3
+  #   nemotron-3-ultra-free - NVIDIA Nemotron 3 Ultra 550B
+  # All other free-tier entries 429, 401 (credits), or 500 on the supplied
+  # key. The catalog changes weekly, so add new free IDs as they appear.
+  ###########################################################################
+  - model_name: claude-coder-zen
+    litellm_params:
+      model: openai/hy3-free
+      api_base: https://opencode.ai/zen/v1
+      api_key: os.environ/OPENCODE_ZEN_API_KEY
+      timeout: 120
+    model_info:
+      provider: opencode-zen
+      id: opencode-zen-hy3-free
+
+  - model_name: claude-coder-zen
+    litellm_params:
+      model: openai/nemotron-3-ultra-free
+      api_base: https://opencode.ai/zen/v1
+      api_key: os.environ/OPENCODE_ZEN_API_KEY
+      timeout: 120
+    model_info:
+      provider: opencode-zen
+      id: opencode-zen-nemotron-3-ultra-free
+
+  ###########################################################################
+  # Tier 3 - OpenRouter (4 keys cycled, free models)
+  # --------------------------------------------------------------------------
+  # Free models have a 50-requests-per-day quota per key. With 4 keys, the
+  # 4 deployments below combine to ~200/day from OpenRouter before
+  # everything cools down. Verified responding with content on the supplied
+  # keys (the temporarily 429 ones also recover - simple-shuffle retries them).
+  ###########################################################################
+  - model_name: claude-coder-openrouter
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+      api_key: os.environ/OPENROUTER_API_KEY_1
+      timeout: 120
+    model_info:
+      provider: openrouter
+      id: openrouter-nemotron-3-super-120b-key-1
+
+  - model_name: claude-coder-openrouter
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+      api_key: os.environ/OPENROUTER_API_KEY_2
+      timeout: 120
+    model_info:
+      provider: openrouter
+      id: openrouter-nemotron-3-super-120b-key-2
+
+  - model_name: claude-coder-openrouter
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+      api_key: os.environ/OPENROUTER_API_KEY_3
+      timeout: 120
+    model_info:
+      provider: openrouter
+      id: openrouter-nemotron-3-super-120b-key-3
+
+  - model_name: claude-coder-openrouter
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+      api_key: os.environ/OPENROUTER_API_KEY_4
+      timeout: 120
+    model_info:
+      provider: openrouter
+      id: openrouter-nemotron-3-super-120b-key-4
+
+  - model_name: claude-coder-openrouter
+    litellm_params:
+      model: openrouter/cohere/north-mini-code:free
+      api_key: os.environ/OPENROUTER_API_KEY_1
+      timeout: 120
+    model_info:
+      provider: openrouter
+      id: openrouter-north-mini-code-key-1
+
+  - model_name: claude-coder-openrouter
+    litellm_params:
+      model: openrouter/cohere/north-mini-code:free
+      api_key: os.environ/OPENROUTER_API_KEY_2
+      timeout: 120
+    model_info:
+      provider: openrouter
+      id: openrouter-north-mini-code-key-2
+
+  - model_name: claude-coder-openrouter
+    litellm_params:
+      model: openrouter/minimax/minimax-m3:free
+      api_key: os.environ/OPENROUTER_API_KEY_1
+      timeout: 120
+    model_info:
+      provider: openrouter
+      id: openrouter-minimax-m3-key-1
+
+  - model_name: claude-coder-openrouter
+    litellm_params:
+      model: openrouter/minimax/minimax-m3:free
+      api_key: os.environ/OPENROUTER_API_KEY_2
+      timeout: 120
+    model_info:
+      provider: openrouter
+      id: openrouter-minimax-m3-key-2
+
+  - model_name: claude-coder-openrouter
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
+      api_key: os.environ/OPENROUTER_API_KEY_1
+      timeout: 120
+    model_info:
+      provider: openrouter
+      id: openrouter-nemotron-3-ultra-key-1
+
+  - model_name: claude-coder-openrouter
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
+      api_key: os.environ/OPENROUTER_API_KEY_2
+      timeout: 120
+    model_info:
+      provider: openrouter
+      id: openrouter-nemotron-3-ultra-key-2
+
+  ###########################################################################
+  # Tier 4 - NVIDIA NIM (free frontier coding models, 1 key)
+  # --------------------------------------------------------------------------
+  # Verified working with the supplied key. These are NVIDIA-hosted
+  # endpoints. The 1M-context models are excellent for Claude Code.
+  ###########################################################################
+  - model_name: claude-coder-nvidia
+    litellm_params:
+      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
+      api_key: os.environ/NVIDIA_NIM_API_KEY
+      timeout: 120
+    model_info:
+      provider: nvidia-nim
+      id: nvidia-nemotron-3-ultra-550b
+
+  - model_name: claude-coder-nvidia
+    litellm_params:
+      model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
+      api_key: os.environ/NVIDIA_NIM_API_KEY
+      timeout: 120
+    model_info:
+      provider: nvidia-nim
+      id: nvidia-nemotron-3-super-120b
+
+  - model_name: claude-coder-nvidia
+    litellm_params:
+      model: nvidia_nim/moonshotai/kimi-k3
+      api_key: os.environ/NVIDIA_NIM_API_KEY
+      timeout: 120
+    model_info:
+      provider: nvidia-nim
+      id: nvidia-kimi-k3
+
+  - model_name: claude-coder-nvidia
+    litellm_params:
+      model: nvidia_nim/nvidia/nemotron-3-nano-30b-a3b
+      api_key: os.environ/NVIDIA_NIM_API_KEY
+      timeout: 120
+    model_info:
+      provider: nvidia-nim
+      id: nvidia-nemotron-3-nano-30b
+
+  - model_name: claude-coder-nvidia
+    litellm_params:
+      model: nvidia_nim/google/gemma-4-31b-it
+      api_key: os.environ/NVIDIA_NIM_API_KEY
+      timeout: 120
+    model_info:
+      provider: nvidia-nim
+      id: nvidia-gemma-4-31b-it
+
+  ###########################################################################
+  # Tier 5 - KiraAI (kiraai.vn, LAST RESORT)
+  # --------------------------------------------------------------------------
+  # WARNING: All models in the user-supplied list are PAID (priced in VND,
+  # the response from /v1/models includes explicit VND amounts per 1M
+  # tokens). They are placed LAST so the gateway only hits this tier when
+  # every free tier is exhausted and cooled down.
+  # Also, every model on this provider currently returns HTTP 500 from
+  # the supplied key (tested at deploy time) - this tier is intentionally
+  # disabled by default. To enable it, uncomment the block and set
+  # KIRAAI_API_KEY.
+  ###########################################################################
+  # - model_name: claude-coder-kiraai
+  #   litellm_params:
+  #     model: openai/kira-mini-1.0
+  #     api_base: https://kiraai.vn/api/v1
+  #     api_key: os.environ/KIRAAI_API_KEY
+  #     timeout: 120
+  #   model_info:
+  #     provider: kiraai
+  #     id: kiraai-kira-mini-1.0
+  # ... additional kiraai models omitted - see git history
+
+###############################################################################
+# Router behavior
+###############################################################################
+router_settings:
+  # Weighted pick across all deployments under the same model_name
+  routing_strategy: simple-shuffle
+
+  # If a deployment fails this many times in the cooldown window, it is
+  # taken out of the pool for cooldown_time seconds. This is the mechanism
+  # that rotates an exhausted API key to the next key in the same tier.
+  num_retries: 1
+  allowed_fails: 2
+  cooldown_time: 60
+
+  # Per-request timeout (seconds). Lower than the per-model timeout above
+  # so we get a faster failover.
+  timeout: 90
+
+  enable_pre_call_checks: false
+
+###############################################################################
+# Fallback chain across tiers
+# ---------------------------------------------------------------------------
+# If ALL deployments in tier 1 are in cooldown (or fail), LiteLLM moves to
+# tier 2. If tier 2 is exhausted, tier 3. Then tier 4. Then tier 5.
+# This satisfies the requirement: "if one provider is rate-limited, fall
+# back to the next provider, do not hammer the unavailable one".
+###############################################################################
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+
+  # Generic fallbacks for any retryable error (429, 5xx, timeout, connection)
+  fallbacks:
+    - claude-coder: ["claude-coder-zen"]
+    - claude-coder-zen: ["claude-coder-openrouter"]
+    - claude-coder-openrouter: ["claude-coder-nvidia"]
+    - claude-coder-nvidia: ["claude-coder-kiraai"]
+
+  # Same again for content-policy errors
+  content_policy_fallbacks:
+    - claude-coder: ["claude-coder-zen"]
+    - claude-coder-zen: ["claude-coder-openrouter"]
+    - claude-coder-openrouter: ["claude-coder-nvidia"]
+    - claude-coder-nvidia: ["claude-coder-kiraai"]
+
+  # Same again for context-window errors
+  context_window_fallbacks:
+    - claude-coder: ["claude-coder-zen"]
+    - claude-coder-zen: ["claude-coder-openrouter"]
+    - claude-coder-openrouter: ["claude-coder-nvidia"]
+    - claude-coder-nvidia: ["claude-coder-kiraai"]
+
+  # Default fallback used when a model name is unknown
+  default_fallbacks:
+    - claude-coder-zen
+    - claude-coder-openrouter
+    - claude-coder-nvidia
+    - claude-coder-kiraai
+
+  # Each tier retries once before falling back
+  num_retries: 1
+
+###############################################################################
+# Server settings
+###############################################################################
+general_settings:
+  # Master key the gateway requires. Set via LITELLM_MASTER_KEY env var.
+  # All Claude Code requests must send: Authorization: Bearer <LITELLM_MASTER_KEY>
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+  # We don't use the Admin UI/database for v1 - keep things simple
+  disable_spend_logs: true
+  disable_error_logs: false

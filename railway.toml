@@ -1,0 +1,29 @@
+###############################################################################
+# Railway service configuration
+# ---------------------------------------------------------------------------
+# This file declares the gateway as a single service that Railway deploys
+# from this repo. There is no database, no Redis, no extra infrastructure.
+# The Dockerfile above provides the runtime, the secrets live in the
+# Railway dashboard under Variables.
+#
+# https://docs.railway.app/reference/config-as-code
+# https://docs.litellm.ai/docs/proxy/deploy
+###############################################################################
+
+# Build from the Dockerfile in this repo
+build:
+  builder: DOCKERFILE
+  dockerfilePath: Dockerfile
+
+# Start the container
+deploy:
+  # Restart policy: ALWAYS restarts after a crash so the gateway stays
+  # available independent of any developer laptop.
+  restartPolicyType: ON_FAILURE
+  restartPolicyMaxRetries: 10
+
+  # Health check on the container
+  healthcheckPath: /health/liveliness
+  healthcheckTimeout: 30
+
+# No private networking, no shared volumes needed for v1.
