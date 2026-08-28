@@ -1,0 +1,8 @@
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://litellm-production-2ce7.up.railway.app",
+    "ANTHROPIC_AUTH_TOKEN": "sk-litellm-gateway-BdWGjmNnHfS2qs9eTbgAQJPrcIL6xXOp",
+    "ANTHROPIC_MODEL": "gateway-main-2",
+    "ANTHROPIC_SMALL_FAST_MODEL": "gateway-fast-2"
+  }
+}
