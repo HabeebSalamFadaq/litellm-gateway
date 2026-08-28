@@ -1,13 +1,28 @@
 """
-Test tool_use for each PRODUCTION gateway group (not the t-* cooldown groups).
+Empirical tool-use test for each candidate model.
+
+Reads the gateway URL and master key from environment variables:
+  GATEWAY_URL  - default https://litellm-production-xxxx.up.railway.app
+  GATEWAY_KEY  - the LITELLM_MASTER_KEY value from Railway Variables
+
+Usage:
+  GATEWAY_KEY=sk-... python test_empirical.py
+  GATEWAY_KEY=sk-... python test_empirical.py https://my-gateway.up.railway.app
 """
 import json
+import os
+import sys
 import time
 import urllib.request
 import urllib.error
 
-BASE = "https://litellm-production-2ce7.up.railway.app"
-KEY = "sk-litellm-gateway-BdWGjmNnHfS2qs9eTbgAQJPrcIL6xXOp"
+BASE = os.environ.get("GATEWAY_URL", "https://litellm-production.up.railway.app")
+KEY = os.environ.get("GATEWAY_KEY", "")
+if not KEY:
+    sys.exit("Set GATEWAY_KEY env var to your LITELLM_MASTER_KEY value, e.g.:\n"
+             "  GATEWAY_KEY=sk-... python test_empirical.py")
+if len(sys.argv) > 1:
+    BASE = sys.argv[1]
 TEMPLATE_PATH = "test_tools.json"
 TIMEOUT = 90
 
