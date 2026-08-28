@@ -24,3 +24,13 @@ logs/
 
 # Local test artifacts
 test-output/
+test_body.json
+test_req.json
+zen_test.json
+gateway.log
+gateway.err.log
+start_local_template.cmd
+
+# GitHub
+.DS_Store
+
