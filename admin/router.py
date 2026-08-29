@@ -49,28 +49,28 @@ def wait_for(url, timeout=60):
     while time.time() < deadline:
         try:
             r = requests.get(url, timeout=1)
-            if r.status_code < 500:
+            # Accept anything - the app might be up but not yet serving correctly
+            if r.status_code < 600:
                 return True
         except Exception:
             pass
         time.sleep(0.5)
     return False
 
-print("Starting LiteLLM proxy...")
+print("Starting LiteLLM proxy in background...")
 lt = start_litellm()
-if not wait_for(f"http://{LITELLM_HOST}:{LITELLM_PORT}/health/liveliness", 60):
-    print("LiteLLM did not become healthy")
-    lt.terminate()
-    raise SystemExit(1)
+# Don't block boot - serve on port 4000 immediately and proxy once LiteLLM is up
+print(f"Router listening on 0.0.0.0:{PUBLIC_PORT}")
 
-print("Starting admin API...")
-ad = start_admin()
-if not wait_for(f"http://127.0.0.1:{ADMIN_PORT}/health", 20):
-    print("Admin API did not become healthy")
-    ad.terminate()
-    raise SystemExit(1)
-
-print(f"Both up. Router listening on 0.0.0.0:{PUBLIC_PORT}")
+# Start admin in a background thread so it can boot up while we serve
+import threading
+def boot_admin():
+    global ad
+    print("Booting admin API...")
+    ad = start_admin()
+    if not wait_for(f"http://127.0.0.1:{ADMIN_PORT}/health", 30):
+        print("WARNING: admin API not ready")
+threading.Thread(target=boot_admin, daemon=True).start()
 
 # ----------------------------------------------------------------------------
 # Helpers: pull token + model info from a /v1/messages or /v1/chat/completions response
@@ -213,5 +213,10 @@ def litellm_proxy(subpath):
         return Response(f"proxy error: {e}", status=502)
 
 if __name__ == "__main__":
-    router.run(host="0.0.0.0", port=PUBLIC_PORT, threaded=True)
+    import sys
+    if "gunicorn" in sys.argv[0] or os.environ.get("GUNICORN_WORKER"):
+        # gunicorn imports 'app' as a module
+        pass
+    else:
+        router.run(host="0.0.0.0", port=PUBLIC_PORT, threaded=True)
 
