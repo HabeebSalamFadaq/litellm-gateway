@@ -7,6 +7,7 @@ This lets the Vercel dashboard talk to /admin/* on the same
 https://<gateway>.up.railway.app host that Claude Code uses for
 /v1/messages.
 """
+# Force redeploy 2026-08-29 21:15
 import os
 import sys
 import shutil
