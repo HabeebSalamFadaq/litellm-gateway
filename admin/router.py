@@ -15,7 +15,7 @@ import time
 import re
 import json
 import requests
-from flask import Flask, request, Response
+from flask import Flask, request, Response, stream_with_context
 
 # Configuration
 LITELLM_PORT = int(os.environ.get("LITELLM_PORT", "4002"))
@@ -148,6 +148,81 @@ def parse_key_label_from_path(path):
         return m.group(1)
     return None
 
+# Headers that must not be copied verbatim when proxying.
+HOP_BY_HOP = {
+    "content-encoding", "content-length", "transfer-encoding", "connection",
+    "keep-alive", "proxy-authenticate", "proxy-authorization", "te",
+    "trailers", "upgrade",
+}
+
+def _request_headers():
+    return {k: v for k, v in request.headers
+            if k.lower() not in ("host", "content-length")}
+
+def _response_headers(resp):
+    return [(k, v) for k, v in resp.headers.items()
+            if k.lower() not in HOP_BY_HOP]
+
+def _api_key_label(headers):
+    for k, v in headers.items():
+        if k.lower() in ("x-litellm-api-key", "x-litellm-key"):
+            return v
+    return None
+
+def _usage_from_sse(tail):
+    """Best-effort usage extraction from the tail of an SSE stream.
+
+    Providers emit usage in the final chunks, so scanning a bounded tail is
+    enough and avoids retaining the whole response.
+    """
+    inp = out = model = None
+    for line in tail.splitlines():
+        line = line.strip()
+        if not line.startswith("data:"):
+            continue
+        payload = line[len("data:"):].strip()
+        if not payload or payload == "[DONE]":
+            continue
+        try:
+            obj = json.loads(payload)
+        except Exception:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        message = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+        model = obj.get("model") or message.get("model") or model
+        usage = obj.get("usage") or {}
+        if not usage:
+            # Anthropic-style events nest usage under `message`.
+            usage = message.get("usage") or {}
+        if usage:
+            inp = usage.get("prompt_tokens") or usage.get("input_tokens") or inp
+            out = usage.get("completion_tokens") or usage.get("output_tokens") or out
+    return inp, out, model
+
+def _log_exchange(subpath, resp, body_text, duration_ms, streamed):
+    try:
+        upstream_id = get_x_litellm_model_id(resp.headers) or ""
+        if streamed:
+            inp, out, body_model = _usage_from_sse(body_text)
+        else:
+            inp, out, body_model, _ = extract_usage_from_response(body_text, subpath)
+        if not upstream_id and body_model:
+            upstream_id = body_model
+        if "/" in upstream_id:
+            provider = upstream_id.split("/")[0]
+        elif upstream_id:
+            provider = "openai"
+        else:
+            provider = "?"
+        model_group = (upstream_id.split("/")[-1] if upstream_id else subpath) or "unknown"
+        status = "ok" if resp.status_code < 400 else "error"
+        err = "" if status == "ok" else f"http {resp.status_code}"
+        post_log(model_group, upstream_id, _api_key_label(resp.headers) or "auto",
+                 provider, inp, out, duration_ms, status, err)
+    except Exception:
+        pass
+
 @router.route("/admin/<path:subpath>", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 @router.route("/admin/", methods=["GET"])
 def admin_proxy(subpath=""):
@@ -158,14 +233,13 @@ def admin_proxy(subpath=""):
         resp = requests.request(
             method=request.method,
             url=url,
-            headers={k: v for k, v in request.headers if k.lower() not in ("host", "content-length")},
+            headers=_request_headers(),
             data=request.get_data(),
             allow_redirects=False,
             timeout=60,
         )
-        excluded = {"content-encoding", "content-length", "transfer-encoding", "connection"}
-        headers = [(k, v) for k, v in resp.headers.items() if k.lower() not in excluded]
-        return Response(resp.content, status=resp.status_code, headers=headers)
+        return Response(resp.content, status=resp.status_code,
+                        headers=_response_headers(resp))
     except Exception as e:
         return Response(f"admin proxy error: {e}", status=502)
 
@@ -180,49 +254,43 @@ def litellm_proxy(subpath):
         resp = requests.request(
             method=request.method,
             url=url,
-            headers={k: v for k, v in request.headers if k.lower() not in ("host", "content-length")},
+            headers=_request_headers(),
             data=request.get_data(),
             allow_redirects=False,
-            timeout=300,
+            timeout=(10, 600),
             stream=True,
         )
-        body_chunks = []
-        for chunk in resp.iter_content(chunk_size=4096):
-            body_chunks.append(chunk)
-        body = b"".join(body_chunks)
-        duration = int((time.time() - t0) * 1000)
-        # Post-process response: extract usage
-        try:
-            upstream_id = get_x_litellm_model_id(resp.headers) or ""
-            provider = upstream_id.split("/")[0] if upstream_id else "?"
-            # model_group: try from path or upstream_id
-            model_group = (upstream_id.split("/")[-1] if upstream_id
-                           else subpath) or "unknown"
-            inp, out, body_model, _ = extract_usage_from_response(body.decode("utf-8", errors="replace"), subpath)
-            # If LiteLLM didn't set x-litellm-model-id, fall back to body's model field
-            if not upstream_id and body_model:
-                upstream_id = body_model
-                provider = body_model.split("/")[0] if "/" in body_model else "openai"
-            # Pull api_key label from x-litellm-key header if present
-            api_key_label = None
-            for k, v in resp.headers.items():
-                if k.lower() in ("x-litellm-api-key", "x-litellm-key"):
-                    api_key_label = v
-                    break
-            # Status code
-            status = "ok" if resp.status_code < 400 else "error"
-            err = "" if status == "ok" else f"http {resp.status_code}"
-            post_log(model_group, upstream_id, api_key_label or "auto",
-                      provider, inp, out, duration, status, err)
-        except Exception:
-            pass
-        excluded = {"content-encoding", "content-length", "transfer-encoding", "connection"}
-        headers = [(k, v) for k, v in resp.headers.items() if k.lower() not in excluded]
-        return Response(body, status=resp.status_code, headers=headers)
     except Exception as e:
         duration = int((time.time() - t0) * 1000)
-        post_log(subpath, "?", "auto", "?", 0, 0, duration, "error", str(e)[:200])
+        post_log(subpath or "/", "?", "auto", "?", 0, 0, duration, "error", str(e)[:200])
         return Response(f"proxy error: {e}", status=502)
+
+    headers = _response_headers(resp)
+    is_sse = "text/event-stream" in resp.headers.get("content-type", "").lower()
+
+    if is_sse:
+        # Relay chunks as they arrive. Buffering the full body here would
+        # defeat streaming for Claude Code, which consumes SSE incrementally.
+        def relay():
+            tail = ""
+            try:
+                for chunk in resp.iter_content(chunk_size=None):
+                    if not chunk:
+                        continue
+                    tail = (tail + chunk.decode("utf-8", errors="replace"))[-16384:]
+                    yield chunk
+            finally:
+                resp.close()
+                _log_exchange(subpath, resp, tail,
+                              int((time.time() - t0) * 1000), True)
+
+        return Response(stream_with_context(relay()), status=resp.status_code,
+                        headers=headers)
+
+    body = resp.content
+    _log_exchange(subpath, resp, body.decode("utf-8", errors="replace"),
+                  int((time.time() - t0) * 1000), False)
+    return Response(body, status=resp.status_code, headers=headers)
 
 def _boot_backends(context):
     """Spawn the LiteLLM proxy and the admin API once."""
