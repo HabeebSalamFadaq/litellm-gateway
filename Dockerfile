@@ -8,4 +8,5 @@ COPY config.yaml /app/config.yaml
 COPY admin/ /app/admin/
 
 # Single port: 4000 - routes /admin/* to Flask, everything else to LiteLLM
-CMD ["gunicorn", "-w", "1", "-b", "0.0.0.0:4000", "admin.router:app"]
+# Use exec form and let gunicorn handle workers via env var
+CMD ["gunicorn", "--workers=1", "-b", "0.0.0.0:4000", "admin.router:app"]
