@@ -59,9 +59,21 @@ def start_litellm():
         "--port", str(LITELLM_PORT),
         "--host", LITELLM_HOST,
     ]
+    print(f"[BOOT] LITELLM_BIN={LITELLM_BIN}", flush=True)
+    print(f"[BOOT] cmd={' '.join(cmd)}", flush=True)
+    print(f"[BOOT] env PORT={os.environ.get('PORT')} LITELLM_PORT={LITELLM_PORT} CONFIG_PATH={CONFIG_PATH}", flush=True)
     # Inherit stdout/stderr so LiteLLM's own startup errors reach the platform
     # log. Discarding them here makes a failed boot impossible to diagnose.
-    return subprocess.Popen(cmd)
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    # Read and forward output in background so we see it in logs
+    def _forward():
+        for line in iter(proc.stdout.readline, b''):
+            if not line:
+                break
+            print(f"[LITELLM] {line.decode('utf-8', errors='replace').rstrip()}", flush=True)
+    import threading
+    threading.Thread(target=_forward, daemon=True).start()
+    return proc
 
 def start_admin():
     cmd = [
