@@ -84,7 +84,7 @@ def log_request(model_group, upstream_model, api_key_label, provider,
                 (int(time.time()), model_group, upstream_model, api_key_label,
                  provider, input_tokens or 0, output_tokens or 0,
                  (input_tokens or 0) + (output_tokens or 0),
-                 duration_ms, status, error or "")
+                 duration_ms, status, error or ""))
     except Exception:
         pass
 

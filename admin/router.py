@@ -8,14 +8,14 @@ https://<gateway>.up.railway.app host that Claude Code uses for
 /v1/messages.
 """
 import os
+import sys
+import shutil
 import subprocess
 import time
 import re
 import json
 import requests
 from flask import Flask, request, Response
-import gunicorn.app.base
-import gunicorn.six
 
 # Configuration
 LITELLM_PORT = int(os.environ.get("LITELLM_PORT", "4002"))
@@ -26,11 +26,35 @@ CONFIG_PATH = os.environ.get("LITELLM_CONFIG_PATH", "/app/config.yaml")
 MASTER_KEY = os.environ.get("LITELLM_MASTER_KEY", "")
 
 # ----------------------------------------------------------------------------
+# Resolve the litellm binary path. On Linux the Dockerfile image has it
+# in PATH. On dev machines it lives elsewhere. Use shutil.which and fall
+# back to a few common locations.
+# ----------------------------------------------------------------------------
+def find_litellm():
+    p = shutil.which("litellm")
+    if p:
+        return p
+    # Common dev locations
+    for cand in [
+        os.path.expanduser("~/.local/bin/litellm"),
+        os.path.expanduser("~/AppData/Roaming/Python/Python314/Scripts/litellm.exe"),
+        os.path.expanduser("~/AppData/Roaming/Python/Python313/Scripts/litellm.exe"),
+        os.path.expanduser("~/AppData/Roaming/Python/Python312/Scripts/litellm.exe"),
+        os.path.expanduser("~/AppData/Roaming/Python/Python311/Scripts/litellm.exe"),
+    ]:
+        if os.path.exists(cand):
+            return cand
+    # Last resort: assume PATH in production
+    return "litellm"
+
+LITELLM_BIN = find_litellm()
+
+# ----------------------------------------------------------------------------
 # Start LiteLLM as a subprocess, bound to a localhost port
 # ----------------------------------------------------------------------------
 def start_litellm():
     cmd = [
-        "litellm",
+        LITELLM_BIN,
         "--config", CONFIG_PATH,
         "--port", str(LITELLM_PORT),
         "--host", LITELLM_HOST,
@@ -39,7 +63,7 @@ def start_litellm():
 
 def start_admin():
     cmd = [
-        "gunicorn", "-w", "1", "-b", f"127.0.0.1:{ADMIN_PORT}",
+        sys.executable, "-m", "gunicorn", "-w", "1", "-b", f"127.0.0.1:{ADMIN_PORT}",
         "admin.app:app",
     ]
     return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -57,20 +81,26 @@ def wait_for(url, timeout=60):
         time.sleep(0.5)
     return False
 
-print("Starting LiteLLM proxy in background...")
-lt = start_litellm()
-# Don't block boot - serve on port 4000 immediately and proxy once LiteLLM is up
-print(f"Router listening on 0.0.0.0:{PUBLIC_PORT}")
-
-# Start admin in a background thread so it can boot up while we serve
-import threading
-def boot_admin():
-    global ad
-    print("Booting admin API...")
-    ad = start_admin()
-    if not wait_for(f"http://127.0.0.1:{ADMIN_PORT}/health", 30):
-        print("WARNING: admin API not ready")
-threading.Thread(target=boot_admin, daemon=True).start()
+def post_log(model_group, upstream_model, api_key_label, provider,
+             input_tokens, output_tokens, duration_ms, status, error):
+    try:
+        requests.post(
+            f"http://127.0.0.1:{ADMIN_PORT}/admin/log",
+            json={
+                "model_group": model_group,
+                "upstream_model": upstream_model,
+                "api_key_label": api_key_label,
+                "provider": provider,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "duration_ms": duration_ms,
+                "status": status,
+                "error": error,
+            },
+            timeout=2,
+        )
+    except Exception:
+        pass
 
 # ----------------------------------------------------------------------------
 # Helpers: pull token + model info from a /v1/messages or /v1/chat/completions response
@@ -213,10 +243,56 @@ def litellm_proxy(subpath):
         return Response(f"proxy error: {e}", status=502)
 
 if __name__ == "__main__":
-    import sys
-    if "gunicorn" in sys.argv[0] or os.environ.get("GUNICORN_WORKER"):
-        # gunicorn imports 'app' as a module
-        pass
-    else:
-        router.run(host="0.0.0.0", port=PUBLIC_PORT, threaded=True)
+    # Direct script run (local dev)
+    print("Starting LiteLLM proxy in background...")
+    lt = start_litellm()
+    print(f"Router listening on 0.0.0.0:{PUBLIC_PORT}")
+
+    import threading
+    def boot_admin():
+        global ad
+        print("Booting admin API...")
+        ad = start_admin()
+        if not wait_for(f"http://127.0.0.1:{ADMIN_PORT}/health", 30):
+            print("WARNING: admin API not ready")
+    threading.Thread(target=boot_admin, daemon=True).start()
+    app.run(host="0.0.0.0", port=PUBLIC_PORT, threaded=True, debug=False)
+else:
+    # Imported by gunicorn (`gunicorn admin.router:app`)
+    # Start LiteLLM and admin right away. We use a file lock to ensure
+    # only one process (the master) actually starts the subprocesses.
+    # On Linux fcntl works; on Windows we fall back to "always master"
+    # which is fine because gunicorn doesn't run on Windows for this project.
+    import os
+    lock_path = os.environ.get("ADMIN_DB_PATH", "/tmp/litellm_admin.db") + ".lock"
+    is_master = True
+    try:
+        import fcntl
+        lf = open(lock_path, "w")
+        fcntl.flock(lf, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (BlockingIOError, OSError, AttributeError, ImportError):
+        # Either fcntl unavailable (Windows) or lock held by another worker.
+        # On Linux+second worker: is_master stays True but we skip the
+        # start_litellm() call (don't double-spawn).
+        is_master = os.name != "nt"  # True on Linux, false would be correct
+        # In Linux multi-worker: try the lock first to detect duplicate
+        # On Windows: no fcntl, assume single worker
+        if hasattr(fcntl, "flock") and not is_master:
+            is_master = False
+        # Actually the cleaner path: detect via gunicorn env var
+        is_master = "GUNICORN_WORKER" not in os.environ
+
+    if is_master:
+        print("Starting LiteLLM proxy in background (gunicorn master)...")
+        lt = start_litellm()
+        print(f"Router listening on 0.0.0.0:{PUBLIC_PORT}")
+
+        import threading
+        def boot_admin():
+            global ad
+            print("Booting admin API...")
+            ad = start_admin()
+            if not wait_for(f"http://127.0.0.1:{ADMIN_PORT}/health", 30):
+                print("WARNING: admin API not ready")
+        threading.Thread(target=boot_admin, daemon=True).start()
 
