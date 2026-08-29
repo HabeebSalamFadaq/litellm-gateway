@@ -11,8 +11,10 @@ COPY config.yaml /app/config.yaml
 COPY admin/ /app/admin/
 
 # Install admin deps (flask, gunicorn, requests, pyyaml)
-# Use python -m pip since pip may not be on PATH
-RUN python -m pip install --no-cache-dir -r /app/admin/requirements.txt
+# The base image's venv has pip stripped. Bootstrap pip via ensurepip,
+# then install requirements.
+RUN python -m ensurepip --upgrade && \
+    python -m pip install --no-cache-dir -r /app/admin/requirements.txt
 
 # The base image sets ENTRYPOINT ["litellm"], which prepends `litellm` to
 # whatever CMD holds. Clear it so CMD runs as written.
