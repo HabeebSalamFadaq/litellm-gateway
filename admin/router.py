@@ -7,7 +7,6 @@ This lets the Vercel dashboard talk to /admin/* on the same
 https://<gateway>.up.railway.app host that Claude Code uses for
 /v1/messages.
 """
-# Force redeploy 2026-08-29 21:15
 import os
 import sys
 import shutil
@@ -27,57 +26,52 @@ CONFIG_PATH = os.environ.get("LITELLM_CONFIG_PATH", "/app/config.yaml")
 MASTER_KEY = os.environ.get("LITELLM_MASTER_KEY", "")
 
 # ----------------------------------------------------------------------------
-# Resolve the litellm entrypoint script. The litellm-database image uses
-# docker/entrypoint.sh (or docker/prod_entrypoint.sh) to run Prisma migrations
-# and set up the runtime environment before starting the proxy. Calling the
-# litellm binary directly bypasses all of that and causes silent exits when
-# the Prisma client can't find its cached query engine.
+# Resolve the litellm binary path. On Linux the Dockerfile image has it
+# in PATH. On dev machines it lives elsewhere. Use shutil.which and fall
+# back to a few common locations.
 # ----------------------------------------------------------------------------
-def find_litellm_entrypoint():
+def find_litellm():
+    p = shutil.which("litellm")
+    if p:
+        return p
+    # Common dev locations
     for cand in [
-        "/app/docker/entrypoint.sh",
-        "/app/docker/prod_entrypoint.sh",
-        "/docker/entrypoint.sh",
-        "/docker/prod_entrypoint.sh",
+        os.path.expanduser("~/.local/bin/litellm"),
+        os.path.expanduser("~/AppData/Roaming/Python/Python314/Scripts/litellm.exe"),
+        os.path.expanduser("~/AppData/Roaming/Python/Python313/Scripts/litellm.exe"),
+        os.path.expanduser("~/AppData/Roaming/Python/Python312/Scripts/litellm.exe"),
+        os.path.expanduser("~/AppData/Roaming/Python/Python311/Scripts/litellm.exe"),
     ]:
         if os.path.exists(cand):
             return cand
-    # Fallback: if the image changed, try to locate it
-    import glob
-    matches = glob.glob("/**/entrypoint.sh", recursive=True)
-    if matches:
-        return matches[0]
-    return None
+    # Last resort: assume PATH in production
+    return "litellm"
 
-LITELLM_ENTRYPOINT = find_litellm_entrypoint()
+LITELLM_BIN = find_litellm()
 
 # ----------------------------------------------------------------------------
-# Start LiteLLM via the image's entrypoint script so Prisma migrations and
-# runtime env prep run first. The script then exec's the litellm proxy.
+# Start LiteLLM directly. No entrypoint script, no migrations needed for
+# the standard litellm image. The admin API uses SQLite for logging.
 # ----------------------------------------------------------------------------
 def start_litellm():
-    if not LITELLM_ENTRYPOINT:
-        raise RuntimeError("Could not locate litellm entrypoint script in image")
-
     cmd = [
-        LITELLM_ENTRYPOINT,
-        "litellm",
+        LITELLM_BIN,
         "--config", CONFIG_PATH,
         "--port", str(LITELLM_PORT),
         "--host", LITELLM_HOST,
     ]
-    print(f"[BOOT] LITELLM_ENTRYPOINT={LITELLM_ENTRYPOINT}", flush=True)
+    print(f"[BOOT] LITELLM_BIN={LITELLM_BIN}", flush=True)
     print(f"[BOOT] cmd={' '.join(cmd)}", flush=True)
     print(f"[BOOT] env PORT={os.environ.get('PORT')} LITELLM_PORT={LITELLM_PORT} CONFIG_PATH={CONFIG_PATH}", flush=True)
-    # Capture both stdout and stderr, forward them with prefixes
-    # Use the FULL environment — Prisma/asyncpg need DATABASE_URL, HOME, PATH intact
+    # Full environment for any providers that need it
+    env = os.environ.copy()
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         bufsize=1,
         universal_newlines=True,
-        env=os.environ.copy(),
+        env=env,
     )
     def _forward(stream, prefix):
         for line in iter(stream.readline, ''):
