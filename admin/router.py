@@ -81,27 +81,6 @@ def wait_for(url, timeout=60):
         time.sleep(0.5)
     return False
 
-def post_log(model_group, upstream_model, api_key_label, provider,
-             input_tokens, output_tokens, duration_ms, status, error):
-    try:
-        requests.post(
-            f"http://127.0.0.1:{ADMIN_PORT}/admin/log",
-            json={
-                "model_group": model_group,
-                "upstream_model": upstream_model,
-                "api_key_label": api_key_label,
-                "provider": provider,
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "duration_ms": duration_ms,
-                "status": status,
-                "error": error,
-            },
-            timeout=2,
-        )
-    except Exception:
-        pass
-
 # ----------------------------------------------------------------------------
 # Helpers: pull token + model info from a /v1/messages or /v1/chat/completions response
 # ----------------------------------------------------------------------------
@@ -142,6 +121,9 @@ def post_log(model_group, upstream_model, api_key_label, provider,
 # Router Flask app
 # ----------------------------------------------------------------------------
 router = Flask(__name__)
+
+# gunicorn is launched against `admin.router:app`, so expose that name.
+app = router
 
 # Pass-through endpoints (no body inspection needed)
 PASSTHROUGH_PREFIXES = ("/admin", "/health", "/metrics", "/v1/models")
@@ -242,57 +224,53 @@ def litellm_proxy(subpath):
         post_log(subpath, "?", "auto", "?", 0, 0, duration, "error", str(e)[:200])
         return Response(f"proxy error: {e}", status=502)
 
-if __name__ == "__main__":
-    # Direct script run (local dev)
-    print("Starting LiteLLM proxy in background...")
-    lt = start_litellm()
-    print(f"Router listening on 0.0.0.0:{PUBLIC_PORT}")
+def _boot_backends(context):
+    """Spawn the LiteLLM proxy and the admin API once."""
+    print(f"Starting LiteLLM proxy in background ({context})...", flush=True)
+    globals()["lt"] = start_litellm()
+    print(f"Router listening on 0.0.0.0:{PUBLIC_PORT}", flush=True)
 
     import threading
+
     def boot_admin():
-        global ad
-        print("Booting admin API...")
-        ad = start_admin()
+        print("Booting admin API...", flush=True)
+        globals()["ad"] = start_admin()
         if not wait_for(f"http://127.0.0.1:{ADMIN_PORT}/health", 30):
-            print("WARNING: admin API not ready")
+            print("WARNING: admin API not ready", flush=True)
+
     threading.Thread(target=boot_admin, daemon=True).start()
+
+
+def _acquire_boot_lock():
+    """Return True if this process should own the backend subprocesses.
+
+    Uses a non-blocking exclusive flock so that only one gunicorn worker
+    spawns LiteLLM even if the worker count is raised later. The lock file
+    handle is intentionally kept alive for the process lifetime. If fcntl is
+    unavailable (Windows dev), fall back to owning the backends.
+    """
+    try:
+        import fcntl
+    except ImportError:
+        return True
+
+    lock_path = os.environ.get("ADMIN_DB_PATH", "/tmp/litellm_admin.db") + ".lock"
+    try:
+        lock_file = open(lock_path, "w")
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (BlockingIOError, OSError):
+        return False
+
+    globals()["_boot_lock_file"] = lock_file
+    return True
+
+
+if __name__ == "__main__":
+    # Direct script run (local dev)
+    _boot_backends("local dev")
     app.run(host="0.0.0.0", port=PUBLIC_PORT, threaded=True, debug=False)
 else:
     # Imported by gunicorn (`gunicorn admin.router:app`)
-    # Start LiteLLM and admin right away. We use a file lock to ensure
-    # only one process (the master) actually starts the subprocesses.
-    # On Linux fcntl works; on Windows we fall back to "always master"
-    # which is fine because gunicorn doesn't run on Windows for this project.
-    import os
-    lock_path = os.environ.get("ADMIN_DB_PATH", "/tmp/litellm_admin.db") + ".lock"
-    is_master = True
-    try:
-        import fcntl
-        lf = open(lock_path, "w")
-        fcntl.flock(lf, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except (BlockingIOError, OSError, AttributeError, ImportError):
-        # Either fcntl unavailable (Windows) or lock held by another worker.
-        # On Linux+second worker: is_master stays True but we skip the
-        # start_litellm() call (don't double-spawn).
-        is_master = os.name != "nt"  # True on Linux, false would be correct
-        # In Linux multi-worker: try the lock first to detect duplicate
-        # On Windows: no fcntl, assume single worker
-        if hasattr(fcntl, "flock") and not is_master:
-            is_master = False
-        # Actually the cleaner path: detect via gunicorn env var
-        is_master = "GUNICORN_WORKER" not in os.environ
-
-    if is_master:
-        print("Starting LiteLLM proxy in background (gunicorn master)...")
-        lt = start_litellm()
-        print(f"Router listening on 0.0.0.0:{PUBLIC_PORT}")
-
-        import threading
-        def boot_admin():
-            global ad
-            print("Booting admin API...")
-            ad = start_admin()
-            if not wait_for(f"http://127.0.0.1:{ADMIN_PORT}/health", 30):
-                print("WARNING: admin API not ready")
-        threading.Thread(target=boot_admin, daemon=True).start()
+    if _acquire_boot_lock():
+        _boot_backends("gunicorn worker")
 
