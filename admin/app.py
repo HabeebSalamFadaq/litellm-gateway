@@ -411,10 +411,12 @@ def ingest_log():
     )
     return jsonify({"ok": True})
 
+# Initialize DB at import time so tables exist before first request
+init_db()
+cleanup_old()
+
 # ----------------------------------------------------------------------------
 # Entrypoint
 # ----------------------------------------------------------------------------
 if __name__ == "__main__":
-    init_db()
-    cleanup_old()
     app.run(host="0.0.0.0", port=ADMIN_PORT, threaded=True)
