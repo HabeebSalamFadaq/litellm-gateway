@@ -59,14 +59,16 @@ def start_litellm():
         "--port", str(LITELLM_PORT),
         "--host", LITELLM_HOST,
     ]
-    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # Inherit stdout/stderr so LiteLLM's own startup errors reach the platform
+    # log. Discarding them here makes a failed boot impossible to diagnose.
+    return subprocess.Popen(cmd)
 
 def start_admin():
     cmd = [
         sys.executable, "-m", "gunicorn", "-w", "1", "-b", f"127.0.0.1:{ADMIN_PORT}",
         "admin.app:app",
     ]
-    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return subprocess.Popen(cmd)
 
 def wait_for(url, timeout=60):
     deadline = time.time() + timeout
