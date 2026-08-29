@@ -2,6 +2,9 @@ FROM ghcr.io/berriai/litellm-database:main-stable
 
 WORKDIR /app
 
+# Ensure Python output is unbuffered so logs appear in real time
+ENV PYTHONUNBUFFERED=1
+
 # Gateway config
 COPY config.yaml /app/config.yaml
 
