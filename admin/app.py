@@ -314,6 +314,86 @@ def test_key():
         return jsonify({"ok": False, "provider": provider,
                         "latency_ms": elapsed, "error": str(e)})
 
+@app.route("/admin/keys")
+def get_keys():
+    """List all configured API keys with their status, usage, and priority."""
+    auth()
+    cfg = load_config()
+    cleanup_old()
+    minutes = int(request.args.get("minutes", 60))
+    cutoff = int(time.time()) - minutes * 60
+    
+    # Get usage stats from DB
+    with db() as conn:
+        rows = conn.execute(
+            """SELECT * FROM requests WHERE ts >= ? ORDER BY ts DESC LIMIT 500""",
+            (cutoff,)).fetchall()
+        requests = [dict(r) for r in rows]
+    
+    # Build key usage map
+    key_usage = {}
+    for r in requests:
+        key = r["api_key_label"] or "unknown"
+        key_usage.setdefault(key, {"requests": 0, "errors": 0, "input_tokens": 0, "output_tokens": 0, "last_used": None})
+        key_usage[key]["requests"] += 1
+        if r["status"] != "ok":
+            key_usage[key]["errors"] += 1
+        key_usage[key]["input_tokens"] += r["input_tokens"] or 0
+        key_usage[key]["output_tokens"] += r["output_tokens"] or 0
+        ts = r["ts"]
+        if key_usage[key]["last_used"] is None or ts > key_usage[key]["last_used"]:
+            key_usage[key]["last_used"] = ts
+    
+    # Build key list from config
+    out = []
+    for entry in cfg.get("model_list", []):
+        lp = entry.get("litellm_params", {})
+        ak = lp.get("api_key", "")
+        if not ak or not ak.startswith("os.environ/"):
+            continue
+        key_label = ak.replace("os.environ/", "")
+        model_name = entry.get("model_name", "")
+        provider = (lp.get("model", "").split("/", 1)[0] if "/" in lp.get("model", "") else "openai")
+        priority = entry.get("model_info", {}).get("rank", 0)
+        enabled = entry.get("model_info", {}).get("enabled", True)
+        mi = entry.get("model_info", {})
+        quota_limit = mi.get("quota_limit")
+        quota_remaining = mi.get("quota_remaining")
+        
+        # Merge with usage
+        usage = key_usage.get(key_label, {"requests": 0, "errors": 0, "input_tokens": 0, "output_tokens": 0, "last_used": None})
+        
+        # Determine status
+        if not enabled:
+            status = "error"
+        elif quota_limit and quota_remaining is not None and quota_remaining <= 0:
+            status = "exhausted"
+        elif usage["errors"] > usage["requests"] * 0.5 and usage["requests"] > 10:
+            status = "rate_limited"
+        elif quota_limit and quota_remaining is not None and quota_remaining < quota_limit * 0.1:
+            status = "low"
+        elif usage["requests"] == 0:
+            status = "unused"
+        else:
+            status = "healthy"
+        
+        out.append({
+            "key_id": key_label[:8] + "..." + key_label[-4:] if len(key_label) > 12 else key_label,
+            "provider": provider,
+            "label": key_label,
+            "status": status,
+            "usage_pct": (100 - round(quota_remaining * 100 / quota_limit)) if quota_limit and quota_remaining is not None else None,
+            "requests_24h": usage["requests"],
+            "errors_24h": usage["errors"],
+            "last_used": datetime.fromtimestamp(usage["last_used"], tz=timezone.utc).isoformat() if usage["last_used"] else None,
+            "quota_limit": quota_limit,
+            "quota_remaining": quota_remaining,
+            "priority": priority,
+            "enabled": enabled,
+        })
+    
+    return jsonify({"keys": out})
+
 @app.route("/admin/log", methods=["POST"])
 def ingest_log():
     """Called by the LiteLLM callback to record a request. Body: {model_group, upstream_model, api_key_label, provider, input_tokens, output_tokens, duration_ms, status, error}."""
