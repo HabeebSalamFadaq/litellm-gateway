@@ -54,7 +54,6 @@ LITELLM_BIN = find_litellm()
 # the standard litellm image. The admin API uses SQLite for logging.
 # ----------------------------------------------------------------------------
 def start_litellm():
-def start_litellm():
     cmd = [
         LITELLM_BIN,
         "--config", CONFIG_PATH,
