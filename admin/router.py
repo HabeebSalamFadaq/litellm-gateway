@@ -58,14 +58,14 @@ def wait_for(url, timeout=60):
 
 print("Starting LiteLLM proxy...")
 lt = start_litellm()
-if not wait_for(f"http://{LITELLM_HOST}:{LITELLM_PORT}/health/liveliness", 90):
+if not wait_for(f"http://{LITELLM_HOST}:{LITELLM_PORT}/health/liveliness", 60):
     print("LiteLLM did not become healthy")
     lt.terminate()
     raise SystemExit(1)
 
 print("Starting admin API...")
 ad = start_admin()
-if not wait_for(f"http://127.0.0.1:{ADMIN_PORT}/health", 30):
+if not wait_for(f"http://127.0.0.1:{ADMIN_PORT}/health", 20):
     print("Admin API did not become healthy")
     ad.terminate()
     raise SystemExit(1)
