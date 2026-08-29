@@ -54,18 +54,13 @@ LITELLM_BIN = find_litellm()
 # the standard litellm image. The admin API uses SQLite for logging.
 # ----------------------------------------------------------------------------
 def start_litellm():
+def start_litellm():
     cmd = [
         LITELLM_BIN,
         "--config", CONFIG_PATH,
         "--port", str(LITELLM_PORT),
         "--host", LITELLM_HOST,
-        "--detailed_debug",
     ]
-    print(f"[BOOT] LITELLM_BIN={LITELLM_BIN}", flush=True)
-    print(f"[BOOT] cmd={' '.join(cmd)}", flush=True)
-    print(f"[BOOT] env PORT={os.environ.get('PORT')} LITELLM_PORT={LITELLM_PORT} CONFIG_PATH={CONFIG_PATH}", flush=True)
-    print(f"[BOOT] MASTER_KEY set: {'LITELLM_MASTER_KEY' in os.environ}", flush=True)
-    print(f"[BOOT] DATABASE_URL set: {'DATABASE_URL' in os.environ}", flush=True)
     # Full environment for any providers that need it
     env = os.environ.copy()
     proc = subprocess.Popen(
@@ -84,10 +79,6 @@ def start_litellm():
     import threading
     threading.Thread(target=_forward, args=(proc.stdout, "LITELLM-OUT"), daemon=True).start()
     threading.Thread(target=_forward, args=(proc.stderr, "LITELLM-ERR"), daemon=True).start()
-    # Give it a moment to produce output or fail
-    time.sleep(2)
-    if proc.poll() is not None:
-        print(f"[BOOT] LITELLM EXITED EARLY with code {proc.returncode}", flush=True)
     return proc
 
 def start_admin():
