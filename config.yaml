@@ -133,6 +133,10 @@ router_settings:
 
 litellm_settings:
   drop_params: true
+  # Prevent context length exceeded errors
+  max_tokens: 8000
+  # Enable context compression for long conversations
+  context_window_fallback: true
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
