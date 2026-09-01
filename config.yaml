@@ -74,6 +74,8 @@ model_list:
     litellm_params: {model: openrouter/z-ai/glm-5.2:free, api_key: os.environ/OPENROUTER_API_KEY_1, timeout: 60}
   - model_name: gateway-main-2
     litellm_params: {model: openrouter/minimax/minimax-m3:free, api_key: os.environ/OPENROUTER_API_KEY_1, timeout: 60}
+  - model_name: gateway-main-2
+    litellm_params: {model: openai/z-ai/glm-5.3-free, api_key: os.environ/TOKENROUTER_API_KEY_1, api_base: https://api.tokenrouter.com/v1, timeout: 60}
 
   # gateway-fast = Tier A fast (gpt-oss-120b on NIM is fast; deepseek-flash times out)
   - model_name: gateway-fast
