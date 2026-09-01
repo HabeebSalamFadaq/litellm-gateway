@@ -24,11 +24,5 @@ ENTRYPOINT []
 # Bind whatever port Railway injects via $PORT (defaults to 8080).
 # gthread worker so one worker serves many concurrent requests.
 CMD ["sh", "-c", "exec python -m gunicorn \
-     --worker-class=gthread \
-     --workers=1 \
-     --threads=16 \
-     --timeout=600 \
-     --graceful-timeout=30 \
-     --bind=0.0.0.0:${PORT:-4000} \
-     --access-logfile=- \
+     --config admin/gunicorn_conf.py \
      admin.router:app"]

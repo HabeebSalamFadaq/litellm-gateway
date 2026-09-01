@@ -262,6 +262,36 @@ def admin_proxy(subpath=""):
     except Exception as e:
         return Response(f"admin proxy error: {e}", status=502)
 
+@router.route("/", methods=["GET"])
+def root_index():
+    """Return a small status page at the gateway root.
+
+    LiteLLM itself has no / route, so without this the user just sees
+    the proxy error when they visit the gateway URL in a browser.
+    """
+    try:
+        r = requests.get(f"http://127.0.0.1:{LITELLM_PORT}/health/liveliness", timeout=2)
+        lt_ok = r.status_code < 500
+    except Exception:
+        lt_ok = False
+    body = (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<title>LiteLLM Gateway</title></head>"
+        "<body style='font-family:system-ui;max-width:680px;margin:48px auto;"
+        "padding:24px;background:#0b0b0b;color:#e5e5e5'>"
+        "<h1 style='margin:0 0 8px 0'>LiteLLM Gateway</h1>"
+        f"<p>Status: <b style='color:{'#7ee787' if lt_ok else '#f85149'}'>"
+        f"{'online' if lt_ok else 'starting'}</b></p>"
+        "<ul>"
+        "<li><a style='color:#58a6ff' href='/health/liveliness'>/health/liveliness</a></li>"
+        "<li><a style='color:#58a6ff' href='/v1/models'>/v1/models</a></li>"
+        "<li><a style='color:#58a6ff' href='/admin/usage'>/admin/usage</a></li>"
+        "<li><a style='color:#58a6ff' href='/admin/keys'>/admin/keys</a></li>"
+        "<li><a style='color:#58a6ff' href='/admin/config'>/admin/config</a></li>"
+        "</ul></body></html>"
+    )
+    return Response(body, status=200, mimetype="text/html")
+
 @router.route("/", defaults={"subpath": ""}, methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 @router.route("/<path:subpath>", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 def litellm_proxy(subpath):
@@ -326,6 +356,14 @@ def _boot_backends(context):
             print("WARNING: admin API not ready", flush=True)
 
     threading.Thread(target=boot_admin, daemon=True).start()
+
+    # Block until LiteLLM is healthy. Without this, the gunicorn worker
+    # comes up and any request before LiteLLM is listening returns 502.
+    print(f"Waiting for LiteLLM to become healthy on :{LITELLM_PORT}...", flush=True)
+    if not wait_for(f"http://127.0.0.1:{LITELLM_PORT}/health/liveliness", 90):
+        print(f"WARNING: LiteLLM did not become healthy in 90s", flush=True)
+    else:
+        print("LiteLLM is healthy", flush=True)
 
 
 def _acquire_boot_lock():
