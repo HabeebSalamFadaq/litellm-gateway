@@ -78,7 +78,99 @@ def start_litellm():
     import threading
     threading.Thread(target=_forward, args=(proc.stdout, "LITELLM-OUT"), daemon=True).start()
     threading.Thread(target=_forward, args=(proc.stderr, "LITELLM-ERR"), daemon=True).start()
+    print(f"[LITELLM] started pid={proc.pid} port={LITELLM_PORT}", flush=True)
     return proc
+
+# Watchdog: if the LiteLLM subprocess dies, restart it.
+# Without this, a single OOM / crash leaves the gateway returning 502
+# until the container is manually restarted. The watchdog polls the
+# process every WATCHDOG_INTERVAL seconds; if it's not alive, it kicks
+# off a fresh subprocess with capped exponential backoff.
+WATCHDOG_INTERVAL = 5          # seconds between liveness checks
+WATCHDOG_BACKOFF_MAX = 60      # cap on restart backoff
+WATCHDOG_BACKOFF_BASE = 2     # base seconds for exponential backoff
+
+def _litellm_watchdog():
+    """Background loop: restart LiteLLM if it dies."""
+    backoff = WATCHDOG_BACKOFF_BASE
+    while True:
+        time.sleep(WATCHDOG_INTERVAL)
+        proc = globals().get("lt")
+        if proc is None:
+            continue
+        alive = (proc.poll() is None)
+        if alive:
+            backoff = WATCHDOG_BACKOFF_BASE
+            continue
+        # Process died
+        rc = proc.returncode
+        print(f"[WATCHDOG] litellm pid={proc.pid} exited rc={rc}; "
+              f"restarting in {backoff}s", flush=True)
+        time.sleep(backoff)
+        try:
+            new_proc = start_litellm()
+            globals()["lt"] = new_proc
+            # Wait for the new instance to come up before next check
+            for _ in range(30):
+                time.sleep(1)
+                if new_proc.poll() is not None:
+                    # Died again immediately - probably bad config
+                    print(f"[WATCHDOG] new litellm died rc={new_proc.returncode}; "
+                          f"backing off", flush=True)
+                    break
+                try:
+                    r = requests.get(
+                        f"http://127.0.0.1:{LITELLM_PORT}/health/liveliness",
+                        timeout=1,
+                    )
+                    if r.status_code < 500:
+                        print(f"[WATCHDOG] new litellm healthy", flush=True)
+                        backoff = WATCHDOG_BACKOFF_BASE
+                        break
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"[WATCHDOG] failed to start litellm: {e}", flush=True)
+        backoff = min(backoff * 2, WATCHDOG_BACKOFF_MAX)
+
+def _admin_watchdog():
+    """Background loop: restart admin if it dies."""
+    backoff = WATCHDOG_BACKOFF_BASE
+    while True:
+        time.sleep(WATCHDOG_INTERVAL)
+        proc = globals().get("ad")
+        if proc is None:
+            continue
+        if proc.poll() is None:
+            backoff = WATCHDOG_BACKOFF_BASE
+            continue
+        rc = proc.returncode
+        print(f"[WATCHDOG] admin pid={proc.pid} exited rc={rc}; "
+              f"restarting in {backoff}s", flush=True)
+        time.sleep(backoff)
+        try:
+            new_proc = start_admin()
+            globals()["ad"] = new_proc
+            for _ in range(15):
+                time.sleep(1)
+                if new_proc.poll() is not None:
+                    print(f"[WATCHDOG] new admin died rc={new_proc.returncode}; "
+                          f"backing off", flush=True)
+                    break
+                try:
+                    r = requests.get(
+                        f"http://127.0.0.1:{ADMIN_PORT}/health",
+                        timeout=1,
+                    )
+                    if r.status_code < 600:
+                        print(f"[WATCHDOG] new admin healthy", flush=True)
+                        backoff = WATCHDOG_BACKOFF_BASE
+                        break
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"[WATCHDOG] failed to start admin: {e}", flush=True)
+        backoff = min(backoff * 2, WATCHDOG_BACKOFF_MAX)
 
 def start_admin():
     cmd = [
@@ -382,6 +474,14 @@ def _boot_backends(context):
             print("WARNING: admin API not ready", flush=True)
 
     threading.Thread(target=boot_admin, daemon=True).start()
+
+    # Start the watchdogs. They run as daemon threads and outlive the
+    # boot function: if the LiteLLM or admin subprocess dies, the
+    # watchdog restarts it. Without this, a single crash leaves the
+    # gateway returning 502 until the container is manually restarted.
+    threading.Thread(target=_litellm_watchdog, daemon=True).start()
+    threading.Thread(target=_admin_watchdog, daemon=True).start()
+    print("Watchdogs started for litellm and admin", flush=True)
 
     # Only block on LiteLLM readiness in local-dev mode. In gunicorn
     # mode, the on_starting hook handles the wait so the import returns

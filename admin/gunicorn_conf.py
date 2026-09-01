@@ -1,5 +1,5 @@
 """
-Gunicorn config: blocks worker boot until LiteLLM is healthy.
+Gunicorn config: brief readiness check, then serve.
 
 Railway injects $PORT (default 8080) as the public-facing port.
 The router listens on that port and reverse-proxies to:
@@ -19,13 +19,16 @@ timeout = 600
 graceful_timeout = 30
 accesslog = "-"
 
-# Block server boot until LiteLLM is ready.
-# Without this hook, workers come up immediately and a request hitting
-# the router before LiteLLM is listening gets a 502 "Connection refused".
+# Brief readiness check. The watchdog thread (in router.py) keeps
+# LiteLLM alive in the background, so we don't need to block gunicorn
+# here. If LiteLLM is already up, we log and proceed; if not, we log
+# and let the watchdog handle it once it can. Either way gunicorn
+# binds to PORT within seconds so Railway's healthcheck sees a
+# responsive service.
 def on_starting(server):
     litellm_port = int(os.environ.get("LITELLM_PORT", "4002"))
     health_url = f"http://127.0.0.1:{litellm_port}/health/liveliness"
-    deadline = time.time() + 60
+    deadline = time.time() + 15  # short - watchdog handles the long case
     last_err = None
     while time.time() < deadline:
         try:
@@ -43,11 +46,12 @@ def on_starting(server):
         ).stdout
         litellm_procs = [l for l in out.splitlines() if "litellm" in l.lower()]
         server.log.warning(
-            f"litellm not ready after 60s. "
-            f"last_err={last_err}. litellm procs={litellm_procs}"
+            f"litellm not ready after 15s. "
+            f"last_err={last_err}. litellm procs={litellm_procs}. "
+            f"Watchdog will restart it."
         )
     except Exception as diag_err:
         server.log.warning(
-            f"litellm not ready after 60s. last_err={last_err}. "
+            f"litellm not ready after 15s. last_err={last_err}. "
             f"diagnose error: {diag_err}"
         )
