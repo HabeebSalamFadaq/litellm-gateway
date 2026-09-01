@@ -248,19 +248,26 @@ def admin_proxy(subpath=""):
     url = f"http://127.0.0.1:{ADMIN_PORT}/admin/{subpath}"
     if request.query_string:
         url += "?" + request.query_string.decode("utf-8")
-    try:
-        resp = requests.request(
-            method=request.method,
-            url=url,
-            headers=_request_headers(),
-            data=request.get_data(),
-            allow_redirects=False,
-            timeout=60,
-        )
-        return Response(resp.content, status=resp.status_code,
-                        headers=_response_headers(resp))
-    except Exception as e:
-        return Response(f"admin proxy error: {e}", status=502)
+    last_err = None
+    resp = None
+    for attempt in range(3):
+        try:
+            resp = requests.request(
+                method=request.method,
+                url=url,
+                headers=_request_headers(),
+                data=request.get_data(),
+                allow_redirects=False,
+                timeout=60,
+            )
+            break
+        except Exception as e:
+            last_err = e
+            time.sleep(0.5 * (attempt + 1))
+    if resp is None:
+        return Response(f"admin proxy error: {last_err}", status=502)
+    return Response(resp.content, status=resp.status_code,
+                    headers=_response_headers(resp))
 
 @router.route("/", methods=["GET"])
 def root_index():
@@ -299,20 +306,30 @@ def litellm_proxy(subpath):
     if request.query_string:
         url += "?" + request.query_string.decode("utf-8")
     t0 = time.time()
-    try:
-        resp = requests.request(
-            method=request.method,
-            url=url,
-            headers=_request_headers(),
-            data=request.get_data(),
-            allow_redirects=False,
-            timeout=(10, 600),
-            stream=True,
-        )
-    except Exception as e:
+    # Brief retry: if LiteLLM is mid-startup the first request can
+    # race the gunicorn on_starting hook. Three short retries covers it
+    # without making real failures wait.
+    last_err = None
+    resp = None
+    for attempt in range(3):
+        try:
+            resp = requests.request(
+                method=request.method,
+                url=url,
+                headers=_request_headers(),
+                data=request.get_data(),
+                allow_redirects=False,
+                timeout=(10, 600),
+                stream=True,
+            )
+            break
+        except Exception as e:
+            last_err = e
+            time.sleep(0.5 * (attempt + 1))
+    if resp is None:
         duration = int((time.time() - t0) * 1000)
-        post_log(subpath or "/", "?", "auto", "?", 0, 0, duration, "error", str(e)[:200])
-        return Response(f"proxy error: {e}", status=502)
+        post_log(subpath or "/", "?", "auto", "?", 0, 0, duration, "error", str(last_err)[:200])
+        return Response(f"proxy error: {last_err}", status=502)
 
     headers = _response_headers(resp)
     is_sse = "text/event-stream" in resp.headers.get("content-type", "").lower()
@@ -342,7 +359,16 @@ def litellm_proxy(subpath):
     return Response(body, status=resp.status_code, headers=headers)
 
 def _boot_backends(context):
-    """Spawn the LiteLLM proxy and the admin API once."""
+    """Spawn the LiteLLM proxy and the admin API once.
+
+    In the gunicorn case, we return immediately so the gunicorn import
+    completes and the worker can bind to PORT. The gunicorn
+    ``on_starting`` hook (see ``gunicorn_conf.py``) blocks until LiteLLM
+    is healthy, then forks workers.
+
+    In the local-dev case (``python -m gunicorn`` not used), we block
+    on LiteLLM readiness so the developer sees errors immediately.
+    """
     print(f"Starting LiteLLM proxy in background ({context})...", flush=True)
     globals()["lt"] = start_litellm()
     print(f"Router listening on 0.0.0.0:{PUBLIC_PORT}", flush=True)
@@ -357,13 +383,15 @@ def _boot_backends(context):
 
     threading.Thread(target=boot_admin, daemon=True).start()
 
-    # Block until LiteLLM is healthy. Without this, the gunicorn worker
-    # comes up and any request before LiteLLM is listening returns 502.
-    print(f"Waiting for LiteLLM to become healthy on :{LITELLM_PORT}...", flush=True)
-    if not wait_for(f"http://127.0.0.1:{LITELLM_PORT}/health/liveliness", 90):
-        print(f"WARNING: LiteLLM did not become healthy in 90s", flush=True)
-    else:
-        print("LiteLLM is healthy", flush=True)
+    # Only block on LiteLLM readiness in local-dev mode. In gunicorn
+    # mode, the on_starting hook handles the wait so the import returns
+    # quickly and gunicorn can bind to PORT.
+    if context == "local dev":
+        print(f"Waiting for LiteLLM to become healthy on :{LITELLM_PORT}...", flush=True)
+        if not wait_for(f"http://127.0.0.1:{LITELLM_PORT}/health/liveliness", 90):
+            print(f"WARNING: LiteLLM did not become healthy in 90s", flush=True)
+        else:
+            print("LiteLLM is healthy", flush=True)
 
 
 def _acquire_boot_lock():

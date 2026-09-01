@@ -7,6 +7,7 @@ The router listens on that port and reverse-proxies to:
   - Admin API on $ADMIN_PORT (default 4001)
 """
 import os
+import subprocess
 import time
 import requests
 
@@ -24,7 +25,7 @@ accesslog = "-"
 def on_starting(server):
     litellm_port = int(os.environ.get("LITELLM_PORT", "4002"))
     health_url = f"http://127.0.0.1:{litellm_port}/health/liveliness"
-    deadline = time.time() + 90
+    deadline = time.time() + 60
     last_err = None
     while time.time() < deadline:
         try:
@@ -35,4 +36,18 @@ def on_starting(server):
         except Exception as e:
             last_err = e
         time.sleep(0.5)
-    server.log.warning(f"litellm not ready after 90s (last_err={last_err}); serving anyway")
+    # Diagnose: is the litellm process even running?
+    try:
+        out = subprocess.run(
+            ["ps", "-ef"], capture_output=True, text=True, timeout=5
+        ).stdout
+        litellm_procs = [l for l in out.splitlines() if "litellm" in l.lower()]
+        server.log.warning(
+            f"litellm not ready after 60s. "
+            f"last_err={last_err}. litellm procs={litellm_procs}"
+        )
+    except Exception as diag_err:
+        server.log.warning(
+            f"litellm not ready after 60s. last_err={last_err}. "
+            f"diagnose error: {diag_err}"
+        )
