@@ -494,12 +494,14 @@ def litellm_proxy(subpath):
     # before forwarding to LiteLLM. Without this the gateway returns
     # 400 because "gateway-main[1m]" isn't in config.yaml.
     body_bytes = _request_body()
-    # Brief retry: if LiteLLM is mid-startup the first request can
-    # race the gunicorn on_starting hook. Three short retries covers it
-    # without making real failures wait.
+    # Retry logic: brief retries on connection errors (LiteLLM mid-startup
+    # race), plus retries on transient 502/503/504 from LiteLLM. The
+    # watchdog restarts LiteLLM when it dies, so a few extra seconds
+    # between attempts lets the new instance come up.
+    TRANSIENT_STATUS = {502, 503, 504}
     last_err = None
     resp = None
-    for attempt in range(3):
+    for attempt in range(6):
         try:
             resp = requests.request(
                 method=request.method,
@@ -510,7 +512,16 @@ def litellm_proxy(subpath):
                 timeout=(10, 600),
                 stream=True,
             )
-            break
+            if resp.status_code not in TRANSIENT_STATUS:
+                break
+            # Got a transient status - close and retry
+            try:
+                resp.close()
+            except Exception:
+                pass
+            last_err = f"upstream {resp.status_code}"
+            time.sleep(2.0 * (attempt + 1))
+            resp = None
         except Exception as e:
             last_err = e
             time.sleep(0.5 * (attempt + 1))
