@@ -426,6 +426,42 @@ def root_index():
     )
     return Response(body, status=200, mimetype="text/html")
 
+@router.route("/v1/models", methods=["GET"])
+def v1_models_with_claude_hints():
+    """Proxy /v1/models and append Claude Code context-window hint
+    variants of every model. Claude Code validates the model name
+    against this list, so without the [1m] suffixes it rejects
+    "gateway-main[1m]" even though the request itself would have
+    worked.
+    """
+    try:
+        r = requests.get(
+            f"http://{LITELLM_HOST}:{LITELLM_PORT}/v1/models",
+            headers=_request_headers(),
+            timeout=10,
+        )
+        payload = r.json()
+    except Exception as e:
+        return Response(f"error: {e}", status=502)
+    if isinstance(payload, dict) and isinstance(payload.get("data"), list):
+        base = payload["data"]
+        hinted = []
+        for entry in base:
+            if not isinstance(entry, dict):
+                continue
+            mid = entry.get("id")
+            if not isinstance(mid, str) or mid.endswith("]"):
+                continue
+            new_entry = dict(entry)
+            new_entry["id"] = f"{mid}[1m]"
+            hinted.append(new_entry)
+        payload["data"] = base + hinted
+    return Response(
+        json.dumps(payload),
+        status=200,
+        mimetype="application/json",
+    )
+
 @router.route("/", defaults={"subpath": ""}, methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 @router.route("/<path:subpath>", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 def litellm_proxy(subpath):
