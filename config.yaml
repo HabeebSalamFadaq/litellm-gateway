@@ -79,35 +79,9 @@ model_list:
   # Production user-facing groups. Pin ANTHROPIC_MODEL to one of these.
   ###########################################################################
 
-  # gateway-main = Multimodal primary (NIM kimi-k3, vision models, Gemini)
-  # Vision models are included so image requests don't fall through to
-  # text-only OpenRouter models (which 404 on image input).
+  # gateway-main = Tier S primary (NIM kimi-k3)
   - model_name: gateway-main
     litellm_params: {model: nvidia_nim/moonshotai/kimi-k3, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 60}
-  - model_name: gateway-main
-    litellm_params: {model: nvidia_nim/meta/llama-3.2-11b-vision-instruct, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 60}
-  - model_name: gateway-main
-    litellm_params: {model: nvidia_nim/meta/llama-3.2-90b-vision-instruct, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 60}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_1, timeout: 60}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_2, timeout: 60}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_3, timeout: 60}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_4, timeout: 60}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_5, timeout: 60}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_6, timeout: 60}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_7, timeout: 60}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_8, timeout: 60}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_9, timeout: 60}
-  - model_name: gateway-main
-    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_10, timeout: 60}
 
   # gateway-vision = NIM vision models for image input
   - model_name: gateway-vision
