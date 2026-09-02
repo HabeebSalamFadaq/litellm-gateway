@@ -270,6 +270,41 @@ def _request_headers():
     return {k: v for k, v in request.headers
             if k.lower() not in ("host", "content-length")}
 
+# Claude Code accepts model names like "gateway-main[1m]" to hint a
+# 1M-token context window. The "[1m]" suffix is a local UI marker
+# that the gateway should ignore when looking up the model. Strip all
+# trailing [...] groups from the model name in the JSON body before
+# proxying.
+_BRACKET_SUFFIX_RE = re.compile(r"(\s*\[[^\]]*\])+\s*$")
+
+def _normalize_model_in_body(body_bytes):
+    """Return (body_bytes, mutated_bool). If the JSON body has a
+    "model" field, strip any trailing [...] suffixes (e.g. [1m],
+    [200k]) from its value.
+    """
+    if not body_bytes:
+        return body_bytes, False
+    try:
+        body = json.loads(body_bytes)
+    except Exception:
+        return body_bytes, False
+    if not isinstance(body, dict):
+        return body_bytes, False
+    model = body.get("model")
+    if not isinstance(model, str):
+        return body_bytes, False
+    new_model = _BRACKET_SUFFIX_RE.sub("", model).rstrip()
+    if new_model == model:
+        return body_bytes, False
+    body["model"] = new_model
+    return json.dumps(body).encode("utf-8"), True
+
+def _request_body():
+    """Read request body and strip Claude Code's [...] context hints
+    from the model name (e.g. gateway-main[1m] -> gateway-main)."""
+    raw = request.get_data()
+    return _normalize_model_in_body(raw)[0]
+
 def _response_headers(resp):
     return [(k, v) for k, v in resp.headers.items()
             if k.lower() not in HOP_BY_HOP]
@@ -398,6 +433,10 @@ def litellm_proxy(subpath):
     if request.query_string:
         url += "?" + request.query_string.decode("utf-8")
     t0 = time.time()
+    # Strip Claude Code's [1m] context-window hint from the model name
+    # before forwarding to LiteLLM. Without this the gateway returns
+    # 400 because "gateway-main[1m]" isn't in config.yaml.
+    body_bytes = _request_body()
     # Brief retry: if LiteLLM is mid-startup the first request can
     # race the gunicorn on_starting hook. Three short retries covers it
     # without making real failures wait.
@@ -409,7 +448,7 @@ def litellm_proxy(subpath):
                 method=request.method,
                 url=url,
                 headers=_request_headers(),
-                data=request.get_data(),
+                data=body_bytes,
                 allow_redirects=False,
                 timeout=(10, 600),
                 stream=True,
