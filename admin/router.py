@@ -434,15 +434,36 @@ def v1_models_with_claude_hints():
     "gateway-main[1m]" even though the request itself would have
     worked.
     """
+    headers = _request_headers()
+    # /v1/models on LiteLLM requires the master key. If the caller
+    # didn't pass one (e.g. Claude Code's model discovery probe, or
+    # a browser hit), inject it here so the upstream call succeeds
+    # and we can return the augmented list.
+    if not any(k.lower() == "authorization" for k in headers):
+        headers["Authorization"] = f"Bearer {MASTER_KEY}"
     try:
         r = requests.get(
             f"http://{LITELLM_HOST}:{LITELLM_PORT}/v1/models",
-            headers=_request_headers(),
+            headers=headers,
             timeout=10,
         )
+        # If upstream still rejected the key, return an empty list
+        # rather than an error so Claude Code's model discovery still
+        # gets a parseable list and falls back to the settings.json
+        # value the user typed.
+        if r.status_code >= 400:
+            return Response(
+                json.dumps({"object": "list", "data": []}),
+                status=200,
+                mimetype="application/json",
+            )
         payload = r.json()
-    except Exception as e:
-        return Response(f"error: {e}", status=502)
+    except Exception:
+        return Response(
+            json.dumps({"object": "list", "data": []}),
+            status=200,
+            mimetype="application/json",
+        )
     if isinstance(payload, dict) and isinstance(payload.get("data"), list):
         base = payload["data"]
         hinted = []
