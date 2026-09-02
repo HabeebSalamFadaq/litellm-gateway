@@ -9,27 +9,20 @@ cloud — your laptop can be off, asleep, or gone.
 Claude Code
     ↓  ANTHROPIC_BASE_URL=https://<your-gateway>.up.railway.app
     ↓  ANTHROPIC_AUTH_TOKEN=<your-gateway-key>
-    ↓  ANTHROPIC_MODEL=gateway-main-2
-    ↓  ANTHROPIC_SMALL_FAST_MODEL=gateway-fast-2
+    ↓  ANTHROPIC_MODEL=gateway-main
+    ↓  ANTHROPIC_SMALL_FAST_MODEL=gateway-fast
 HTTPS endpoint (Railway)
     ↓
 LiteLLM proxy (Docker, no DB, config-file based)
     ↓
-simple-shuffle load-balancing across 6 model groups
+simple-shuffle load-balancing across 2 model groups
     ↓
-┌─ gateway-main      NIM kimi-k3                       (Tier S)
-├─ gateway-main-2    OpenRouter GLM 5.2 / minimax m3   (Tier S)
-├─ gateway-fast      NIM gpt-oss-120b                  (Tier A)
-├─ gateway-fast-2    NIM + Groq gpt-oss-20b            (Tier B)
-├─ gateway-backup    OpenRouter nemotron-3-super      (proven live)
-└─ gateway-legacy    Gemini 2.5 Flash × 10 keys       (last resort)
+┌─ gateway-main    All smart models: NIM kimi-k3, OpenRouter GLM/m3/nemotron, Gemini flash (Tier S)
+└─ gateway-fast    All fast models: NIM gpt-oss-120b/20b, Groq gpt-oss-20b, nemotron-nano (Tier A/B)
 
-Fallback chain on 429/5xx/timeout:
-  gateway-main    → gateway-main-2   → gateway-backup → gateway-legacy
-  gateway-main-2  → gateway-backup   → gateway-legacy
-  gateway-fast    → gateway-fast-2   → gateway-backup → gateway-legacy
-  gateway-fast-2  → gateway-backup   → gateway-legacy
-  gateway-backup  → gateway-legacy
+Each group is a self-contained fallback chain: any single model failing
+just routes to the next one in the same group. No cross-group fallbacks
+to keep it simple.
 ```
 
 ## Why this works
@@ -230,7 +223,7 @@ curl -s -X POST $URL/v1/messages \
   -H "anthropic-version: 2023-06-01" \
   -H "content-type: application/json" \
   -d '{
-    "model": "gateway-main-2",
+    "model": "gateway-main",
     "max_tokens": 100,
     "messages": [{"role": "user", "content": "say hi"}]
   }'
@@ -250,8 +243,8 @@ If the file doesn't exist, create it. If it does, add/update the `env` block:
   "env": {
     "ANTHROPIC_BASE_URL": "https://litellm-gateway-production-xxxx.up.railway.app",
     "ANTHROPIC_AUTH_TOKEN": "sk-<your-LITELLM_MASTER_KEY>",
-    "ANTHROPIC_MODEL": "gateway-main-2",
-    "ANTHROPIC_SMALL_FAST_MODEL": "gateway-fast-2",
+    "ANTHROPIC_MODEL": "gateway-main",
+    "ANTHROPIC_SMALL_FAST_MODEL": "gateway-fast",
     "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT": "1"
   }
 }
@@ -268,7 +261,7 @@ Inside Claude Code, type `/status`. You should see:
 
 - **Anthropic base URL**: `https://litellm-gateway-production-xxxx.up.railway.app`
 - **Auth token**: ANTHROPIC_AUTH_TOKEN
-- **Model**: `gateway-main-2[1m]` (the `1m` is a 1M-token context window hint)
+- **Model**: `gateway-main` (200k context window via `CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT`)
 
 If you see the gateway URL, the connection works. Now type any
 question — Claude Code will route through the gateway.
