@@ -62,12 +62,52 @@ model_list:
     model_info: {tier: B, rank: 14, provider: nvidia-nim}
 
   ###########################################################################
+  # Tier V (vision-capable models — handle image input)
+  ###########################################################################
+
+  # T-V-1: llama-3.2-11b-vision — free on NIM, supports image+text
+  - model_name: t-llama-3.2-11b-vision
+    litellm_params: {model: nvidia_nim/meta/llama-3.2-11b-vision-instruct, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 60}
+    model_info: {tier: V, rank: 20, provider: nvidia-nim}
+
+  # T-V-2: llama-3.2-90b-vision — larger, free on NIM
+  - model_name: t-llama-3.2-90b-vision
+    litellm_params: {model: nvidia_nim/meta/llama-3.2-90b-vision-instruct, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 60}
+    model_info: {tier: V, rank: 21, provider: nvidia-nim}
+
+  ###########################################################################
   # Production user-facing groups. Pin ANTHROPIC_MODEL to one of these.
   ###########################################################################
 
   # gateway-main = Tier S primary (NIM kimi-k3)
   - model_name: gateway-main
     litellm_params: {model: nvidia_nim/moonshotai/kimi-k3, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 60}
+
+  # gateway-vision = NIM vision models for image input
+  - model_name: gateway-vision
+    litellm_params: {model: nvidia_nim/meta/llama-3.2-11b-vision-instruct, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 60}
+  - model_name: gateway-vision
+    litellm_params: {model: nvidia_nim/meta/llama-3.2-90b-vision-instruct, api_key: os.environ/NVIDIA_NIM_API_KEY, timeout: 60}
+  - model_name: gateway-vision
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_1, timeout: 60}
+  - model_name: gateway-vision
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_2, timeout: 60}
+  - model_name: gateway-vision
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_3, timeout: 60}
+  - model_name: gateway-vision
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_4, timeout: 60}
+  - model_name: gateway-vision
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_5, timeout: 60}
+  - model_name: gateway-vision
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_6, timeout: 60}
+  - model_name: gateway-vision
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_7, timeout: 60}
+  - model_name: gateway-vision
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_8, timeout: 60}
+  - model_name: gateway-vision
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_9, timeout: 60}
+  - model_name: gateway-vision
+    litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY_10, timeout: 60}
 
   # gateway-main-2 = Tier S OpenRouter (GLM 5.2 + minimax m3)
   - model_name: gateway-main-2
